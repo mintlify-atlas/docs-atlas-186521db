@@ -1,0 +1,495 @@
+---
+title: Performance Tracking
+description: Monitor your learning progress, mastery levels, and interview performance
+---
+
+## Overview
+
+The platform uses the `UserMastery` model to track your learning progress across different topics and concepts. This comprehensive tracking system helps you identify strengths, weaknesses, and areas requiring focused practice.
+
+## UserMastery Model
+
+Each topic you practice has a corresponding UserMastery record:
+
+```python
+class UserMastery(db.Model):
+    # Identifiers
+    user_id                 # Your user ID
+    topic                   # Topic name (e.g., 'machine_learning', 'python')
+    
+    # Session tracking
+    sessions_attempted      # Number of practice sessions
+    questions_attempted     # Total questions answered
+    correct_count           # Number of correct answers
+    last_session_date       # Most recent practice date
+    
+    # Mastery scores (0-1 range)
+    mastery_level          # Overall mastery score
+    semantic_avg           # Average semantic similarity
+    keyword_avg            # Average keyword coverage
+    
+    # Performance metrics
+    avg_response_time      # Average time to answer
+    
+    # Learning velocity
+    mastery_velocity       # Rate of improvement
+    last_mastery           # Previous mastery score
+    
+    # Adaptive difficulty
+    current_difficulty     # Current difficulty level
+    consecutive_good       # Streak of good performances
+    consecutive_poor       # Streak of poor performances
+    
+    # Concept-level tracking
+    concept_masteries      # JSON with detailed concept data
+    weak_concepts          # Concepts below mastery threshold
+    strong_concepts        # Concepts above mastery threshold
+    concept_stagnation     # Concepts not improving
+```
+
+## Viewing Mastery Levels
+
+### Overall Progress
+
+Get a comprehensive view of your progress across all topics:
+
+```bash
+GET /api/user/progress
+Authorization: Bearer <your-token>
+```
+
+**Response Structure:**
+```json
+{
+  "topics": {
+    "machine_learning": {
+      "mastery": 0.785,
+      "sessions_attempted": 12,
+      "questions_attempted": 96,
+      "correct_count": 78,
+      "last_session_date": "2026-03-03T14:30:00",
+      "semantic_avg": 0.802,
+      "keyword_avg": 0.768,
+      "weak_concepts": ["neural_networks", "gradient_descent"],
+      "strong_concepts": ["linear_regression", "decision_trees"],
+      "current_difficulty": "medium",
+      "mastery_velocity": 0.042
+    },
+    "python": {
+      "mastery": 0.892,
+      "sessions_attempted": 8,
+      "questions_attempted": 64,
+      "correct_count": 59,
+      "weak_concepts": ["decorators"],
+      "strong_concepts": ["list_comprehensions", "generators", "classes"]
+    }
+  },
+  "overall": {
+    "avg_mastery": 0.839,
+    "total_sessions": 20,
+    "topics_count": 2
+  }
+}
+```
+
+Located in `app.py:1992-2081`
+
+### Topic-Specific Mastery
+
+Get detailed mastery data for a specific topic:
+
+```bash
+GET /api/adaptive/mastery/<topic>
+Authorization: Bearer <your-token>
+```
+
+**Response:**
+```json
+{
+  "mastery": {
+    "topic": "machine_learning",
+    "mastery_level": 0.785,
+    "semantic_avg": 0.802,
+    "keyword_avg": 0.768,
+    "sessions_attempted": 12,
+    "questions_attempted": 96,
+    "correct_count": 78,
+    "avg_response_time": 45.2,
+    "current_difficulty": "medium",
+    "mastery_velocity": 0.042,
+    "consecutive_good": 3,
+    "consecutive_poor": 0,
+    "weak_concepts": ["neural_networks", "backpropagation"],
+    "strong_concepts": ["regression", "classification"],
+    "concept_stagnation": {"gradient_descent": 2}
+  },
+  "exists": true
+}
+```
+
+Located in `app.py:2081-2095`
+
+## Understanding Metrics
+
+The platform tracks several key performance indicators:
+
+### Semantic Similarity
+
+**What it measures:** How well your answers match expected responses in meaning and content.
+
+**How it's calculated:**
+- Uses SentenceTransformer embeddings (all-MiniLM-L6-v2)
+- Computes cosine similarity between your answer and expected answer
+- Range: 0.0 (no match) to 1.0 (perfect match)
+
+**What the scores mean:**
+- **0.9-1.0**: Excellent understanding, comprehensive answer
+- **0.7-0.89**: Good grasp, minor details missing
+- **0.5-0.69**: Partial understanding, needs improvement
+- **Below 0.5**: Weak understanding, requires focused study
+
+**Field:** `semantic_avg` - Average across all questions in topic
+
+### Keyword Coverage
+
+**What it measures:** Presence of important technical terms and concepts in your answers.
+
+**How it's calculated:**
+- Extracts key terms from expected answer
+- Checks which terms appear in your response
+- Percentage of expected keywords found
+
+**Example:**
+```
+Expected keywords: ["supervised", "training", "labels", "algorithm"]
+Your answer contains: ["supervised", "training", "model"]
+Keyword coverage: 2/4 = 0.50
+```
+
+**Field:** `keyword_avg` - Average keyword coverage score
+
+### Mastery Level
+
+**What it measures:** Your overall proficiency in a topic.
+
+**How it's calculated:**
+- Combines semantic similarity and keyword coverage
+- Weighted by recent performance (recent answers count more)
+- Adjusted based on question difficulty
+
+**Formula (simplified):**
+```python
+mastery_level = (semantic_avg * 0.6) + (keyword_avg * 0.4)
+```
+
+**Field:** `mastery_level` - Overall topic mastery (0-1)
+
+**Interpretation:**
+- **0.85+**: Advanced mastery, ready for senior-level questions
+- **0.70-0.84**: Solid understanding, intermediate level
+- **0.50-0.69**: Developing skills, needs practice
+- **Below 0.50**: Beginner level, focus on fundamentals
+
+### Learning Velocity
+
+**What it measures:** How quickly you're improving.
+
+**How it's calculated:**
+```python
+mastery_velocity = current_mastery - last_mastery
+```
+
+**Field:** `mastery_velocity`
+
+**Interpretation:**
+- **Positive**: You're improving
+- **Zero**: Performance plateau
+- **Negative**: Recent performance decline (may indicate fatigue or harder questions)
+
+### Response Time
+
+**What it measures:** Average time to answer questions.
+
+**Field:** `avg_response_time` (in seconds)
+
+**Usage:**
+- Tracks your thinking speed
+- Identifies topics where you hesitate
+- Helps calibrate interview readiness
+
+## Session History and Progress
+
+### View All Sessions
+
+Retrieve your complete session history:
+
+```bash
+GET /api/dashboard_data
+Authorization: Bearer <your-token>
+```
+
+**Includes:**
+- All interview sessions (mock, technical, coding)
+- Debugging sessions
+- Scores and completion dates
+- Session-specific feedback
+
+**Filtering:**
+```bash
+GET /api/sessions?type=technical
+```
+
+Filter by session type to focus on specific practice areas.
+
+Located in `app.py:3170-3186`
+
+### Recent Performance
+
+Get your last 20 sessions sorted by date:
+
+```bash
+GET /api/sessions
+Authorization: Bearer <your-token>
+```
+
+**Response:**
+```json
+{
+  "sessions": [
+    {
+      "id": 145,
+      "session_type": "technical",
+      "topic": "machine_learning",
+      "score": 78.5,
+      "duration": 600,
+      "created_at": "2026-03-03T14:30:00",
+      "completed_at": "2026-03-03T14:40:00"
+    }
+  ]
+}
+```
+
+### Performance Trends
+
+Track improvement over time:
+
+**Sessions Attempted:**
+- Shows practice frequency
+- Located in `sessions_attempted` field
+
+**Correct Count vs. Questions Attempted:**
+- Accuracy rate = `correct_count / questions_attempted`
+- Indicates answer quality
+
+**Mastery Velocity:**
+- Positive trend = consistent improvement
+- Negative trend = may need to review fundamentals
+
+## Concept-Level Tracking
+
+The platform tracks mastery at the individual concept level within each topic.
+
+### Concept Masteries
+
+Detailed data for each concept stored as JSON:
+
+```python
+concept_masteries = {
+    "neural_networks": {
+        "mastery_level": 0.65,
+        "attempts": 8,
+        "correct": 5,
+        "is_weak": True,
+        "is_strong": False,
+        "stagnation_count": 1,
+        "last_seen": 1709478600.0
+    },
+    "linear_regression": {
+        "mastery_level": 0.92,
+        "attempts": 12,
+        "correct": 11,
+        "is_weak": False,
+        "is_strong": True,
+        "stagnation_count": 0
+    }
+}
+```
+
+**Access methods:**
+```python
+# Get all concept data
+mastery.get_concept_masteries()
+
+# Get weak concepts (mastery < 0.6)
+mastery.get_weak_concepts()
+
+# Get strong concepts (mastery >= 0.8)
+mastery.get_strong_concepts()
+
+# Get stagnation counts
+mastery.get_concept_stagnation()
+```
+
+Located in `models.py:112-147`
+
+### Weak vs. Strong Concepts
+
+**Weak Concepts** (`is_weak: true`):
+- Mastery level below 0.6
+- Require focused practice
+- Appear more frequently in adaptive sessions
+
+**Strong Concepts** (`is_strong: true`):
+- Mastery level above 0.8
+- Well understood
+- Appear less frequently to avoid redundancy
+
+### Concept Stagnation
+
+**What it tracks:** Concepts where mastery isn't improving despite practice.
+
+**Field:** `stagnation_count`
+- Increments when mastery doesn't increase after attempts
+- Used to adjust teaching strategy
+- May trigger different question types or explanations
+
+## Adaptive Difficulty
+
+The system automatically adjusts question difficulty based on your performance.
+
+### Difficulty Levels
+
+**Field:** `current_difficulty`
+
+**Values:**
+- `easy`: Foundational questions
+- `medium`: Standard interview questions (default)
+- `hard`: Advanced and complex scenarios
+
+### Difficulty Progression
+
+**Triggered by streaks:**
+
+**`consecutive_good` (good performances):**
+- 3+ consecutive good answers → increase difficulty
+- Keeps you challenged and engaged
+
+**`consecutive_poor` (poor performances):**
+- 3+ consecutive weak answers → decrease difficulty
+- Helps rebuild confidence and fundamentals
+
+**Reset conditions:**
+- Streaks reset when you change difficulty levels
+- Reset when switching topics
+
+## Resetting Mastery
+
+If you want to start fresh or practice from the beginning:
+
+### Reset Specific Topic
+
+```bash
+POST /api/user/reset_mastery
+Authorization: Bearer <your-token>
+{
+  "topic": "machine_learning"
+}
+```
+
+**Effect:**
+- Deletes UserMastery record for that topic
+- Clears all concept data
+- Preserves session history
+
+### Reset All Topics
+
+```bash
+POST /api/user/reset_mastery
+Authorization: Bearer <your-token>
+{
+  "topic": "all"
+}
+```
+
+**Effect:**
+- Deletes all UserMastery records
+- Fresh start across all topics
+- Session history remains intact
+
+Located in `app.py:2234-2279`
+
+<Warning>
+  Resetting mastery is **irreversible**. Your session history is preserved, but all progress metrics and concept tracking will be deleted.
+</Warning>
+
+## Debugging Sessions
+
+For debugging practice, separate tracking is available:
+
+```bash
+GET /api/profile/debugging_history
+Authorization: Bearer <your-token>
+```
+
+**Includes:**
+- Debugging session records
+- Code challenges completed
+- Performance summaries
+- Concepts practiced
+
+Located in `app.py:2801-2806`
+
+## Action Plans
+
+Get personalized learning recommendations:
+
+```bash
+GET /api/profile/action_plans
+Authorization: Bearer <your-token>
+```
+
+Based on your mastery data, receives:
+- Topics to focus on
+- Specific weak concepts to practice
+- Recommended session types
+- Difficulty adjustments
+
+Located in `app.py:2915-2932`
+
+## Best Practices
+
+<Tip>
+  **Maximize your learning:**
+  
+  - **Practice regularly**: Consistent practice improves mastery velocity
+  - **Review weak concepts**: Focus on areas with low mastery levels
+  - **Monitor stagnation**: If a concept isn't improving, try different learning resources
+  - **Track velocity**: Positive velocity means your study approach is working
+  - **Use session history**: Review past feedback to avoid repeating mistakes
+</Tip>
+
+<Tip>
+  **Understanding your metrics:**
+  
+  - **Semantic similarity** reflects comprehension depth
+  - **Keyword coverage** shows technical vocabulary knowledge
+  - **Combined mastery** gives the complete picture
+  - **Response time** indicates confidence level
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Resume Practice" icon="repeat" href="/guide/interview-sessions">
+    Continue with more interview sessions
+  </Card>
+  <Card title="Resume Analysis" icon="magnifying-glass-chart" href="/features/resume-analysis">
+    Find skill gaps to address
+  </Card>
+  <Card title="Interview Endpoints" icon="book" href="/api/interview-endpoints">
+    Explore progress tracking endpoints
+  </Card>
+  <Card title="Adaptive Learning" icon="chart-mixed" href="/features/adaptive-learning">
+    View comprehensive mastery data
+  </Card>
+</CardGroup>

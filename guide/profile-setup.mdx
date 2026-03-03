@@ -1,0 +1,270 @@
+---
+title: Profile Setup
+description: Complete your user profile to personalize your interview preparation experience
+---
+
+## Overview
+
+Your profile stores essential information that powers personalized interview questions, tracks your progress, and helps match you with relevant opportunities. Based on the User model, your profile includes basic information, professional experience, skills, and your resume.
+
+## User Profile Fields
+
+Your profile consists of the following fields from the User model:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `username` | String (80) | Yes | Unique identifier, 3-20 chars |
+| `email` | String (120) | Yes | Unique email address |
+| `full_name` | String (100) | No | Your display name |
+| `phone` | String (20) | No | Contact phone number |
+| `experience_years` | Integer | No | Years of professional experience (default: 0) |
+| `skills` | JSON Array | No | List of technical skills |
+| `resume_filename` | String (255) | No | Stored resume file reference |
+
+## Completing Your Profile
+
+<Steps>
+  <Step title="Access profile settings">
+    Navigate to your profile page after logging in. You can view your current profile information:
+
+    ```bash
+    GET /api/profile
+    Authorization: Bearer <your-token>
+    ```
+
+    **Response:**
+    ```json
+    {
+      "user": {
+        "id": 1,
+        "username": "john_doe",
+        "email": "john@example.com",
+        "full_name": "John Doe",
+        "phone": null,
+        "experience_years": 0,
+        "skills": [],
+        "resume_filename": null,
+        "created_at": "2026-03-03T10:30:00"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Update profile information">
+    Fill in your professional details:
+
+    **Full Name**
+    - Your preferred display name
+    - Used in reports and certificates
+
+    **Phone Number**
+    - Optional contact information
+    - Format: Up to 20 characters
+
+    **Years of Experience**
+    - Integer value representing your professional experience
+    - Used to calibrate interview difficulty
+    - Default is 0 for entry-level
+
+    **Skills**
+    - Add your technical skills as a JSON array
+    - Skills can be auto-extracted from your resume
+    - Manually add or modify as needed
+
+    ```bash
+    POST /api/update_profile
+    Authorization: Bearer <your-token>
+    {
+      "full_name": "John Doe",
+      "phone": "+1-555-0123",
+      "experience_years": 3,
+      "skills": ["Python", "JavaScript", "React", "Node.js", "SQL"]
+    }
+    ```
+  </Step>
+
+  <Step title="Save changes">
+    Your profile updates are saved immediately to the database. The system responds with:
+
+    ```json
+    {
+      "success": true,
+      "message": "Profile updated successfully"
+    }
+    ```
+  </Step>
+</Steps>
+
+## Uploading Resume
+
+Your resume is **critical** for personalized interview preparation. The system analyzes your resume to:
+- Extract technical skills automatically
+- Generate relevant interview questions
+- Match your experience with job descriptions
+- Create personalized feedback
+
+<Steps>
+  <Step title="Prepare your resume">
+    Ensure your resume meets these requirements:
+
+    **Supported Formats:**
+    - PDF (`.pdf`)
+    - Microsoft Word (`.docx`)
+
+    **Content Requirements:**
+    - Professional experience
+    - Technical skills section
+    - Projects and achievements
+    - Education background
+  </Step>
+
+  <Step title="Upload with job description">
+    <Warning>
+      A **Job Description is required** when uploading your resume. This ensures the platform can analyze your fit and generate relevant questions.
+    </Warning>
+
+    Upload your resume along with the target job description:
+
+    ```bash
+    POST /api/upload_resume
+    Authorization: Bearer <your-token>
+    Content-Type: multipart/form-data
+
+    resume: <file>
+    job_description: "<job description text>"
+    ```
+
+    The system will:
+    1. Extract text from your resume
+    2. Parse skills, experience, projects, and certifications
+    3. Analyze fit with the job description
+    4. Process content for RAG-based question generation
+    5. Store embeddings for semantic search
+  </Step>
+
+  <Step title="Review analysis results">
+    After successful upload, you'll receive detailed analysis:
+
+    ```json
+    {
+      "success": true,
+      "message": "Resume uploaded and analyzed successfully",
+      "data": {
+        "skills": ["Python", "Machine Learning", "TensorFlow"],
+        "experience_years": 3,
+        "projects": ["Built recommendation engine..."],
+        "certifications": ["AWS Certified Developer"],
+        "job_fit_analysis": {
+          "keyword_score": 0.75,
+          "semantic_score": 0.82,
+          "matching_skills": ["Python", "SQL"],
+          "missing_skills": ["Kubernetes", "Docker"],
+          "experience_fit": "Good fit"
+        },
+        "chunks_processed": 15,
+        "rag_ready": true,
+        "jd_embedding_stored": true
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Auto-populated fields">
+    The system automatically updates your profile:
+
+    - `skills`: Extracted from resume
+    - `experience_years`: Calculated from work history
+    - `resume_filename`: Stored as `{user_id}_{original_filename}`
+
+    You can manually edit these fields if needed using the update profile endpoint.
+  </Step>
+</Steps>
+
+## Resume Processing Details
+
+### Text Extraction
+
+The platform extracts text using the `parse_resume_text()` function from `app.py:643`, which identifies:
+
+- **Skills**: Technical keywords and technologies
+- **Experience**: Years of professional work
+- **Projects**: Project descriptions and achievements  
+- **Internships**: Internship experience
+- **Certifications**: Professional certifications
+
+### Job Fit Analysis
+
+The `analyze_resume_job_fit()` function performs:
+
+**Keyword Matching:**
+- Extracts skills from resume and job description
+- Calculates percentage of matching skills
+- Identifies missing skills you should develop
+
+**Semantic Similarity:**
+- Uses SentenceTransformer model (all-MiniLM-L6-v2)
+- Embeds resume content and job description
+- Computes cosine similarity score (0-1)
+
+**Experience Assessment:**
+- Compares your years of experience with requirements
+- Provides fit recommendation
+
+### FAISS Processing
+
+Your resume is processed with `process_resume_for_faiss()` to enable:
+
+- **Resume-based questions**: Generate interview questions from your specific experience
+- **Contextual evaluation**: Compare your answers against your resume
+- **Semantic search**: Find relevant resume sections during interviews
+
+The job description embedding is stored separately for generating role-specific questions.
+
+## Setting Preferences
+
+While the User model doesn't include explicit preference fields, your profile data influences:
+
+**Interview Difficulty:**
+- Based on `experience_years`
+- Entry-level (0-2 years): Easier questions
+- Mid-level (3-5 years): Moderate difficulty
+- Senior (6+ years): Advanced concepts
+
+**Question Relevance:**
+- Skills array determines technical topics
+- Resume content shapes behavioral questions
+- Job description guides role-specific scenarios
+
+**Progress Tracking:**
+- UserMastery records are created per topic
+- Performance metrics adapt to your level
+- Weak areas trigger targeted practice
+
+## Profile Data Security
+
+<Tip>
+  **Your data is protected:**
+  - Passwords are hashed using Werkzeug's `generate_password_hash`
+  - Resume files are stored with user ID prefix to prevent conflicts
+  - All API endpoints require JWT authentication
+  - Email addresses are validated and must be unique
+</Tip>
+
+## Next Steps
+
+Once your profile is complete:
+
+<CardGroup cols={2}>
+  <Card title="Start Interviews" icon="microphone" href="/guide/interview-sessions">
+    Begin mock, technical, or coding interview sessions
+  </Card>
+  <Card title="Track Performance" icon="chart-bar" href="/guide/performance-tracking">
+    Monitor your mastery levels and progress
+  </Card>
+  <Card title="Mock Interviews" icon="file-search" href="/features/mock-interviews">
+    Generate questions based on your resume
+  </Card>
+  <Card title="Resume Analysis" icon="magnifying-glass" href="/features/resume-analysis">
+    Find skill gaps between your resume and job requirements
+  </Card>
+</CardGroup>

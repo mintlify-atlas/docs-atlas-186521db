@@ -1,0 +1,548 @@
+---
+title: Adaptive Learning
+description: AI-powered difficulty adjustment that tracks your mastery and personalizes question progression
+---
+
+## Overview
+
+The Adaptive Learning system is an intelligent controller that tracks your knowledge mastery across Computer Science topics, automatically adjusts question difficulty, and ensures optimal learning progression. Unlike static practice, this system learns from every answer you provide and adapts in real-time.
+
+## How Adaptive Learning Works
+
+### Core Concepts
+
+The system operates on three key principles:
+
+**1. Mastery Tracking**: Every answer updates your mastery scores for specific concepts
+
+**2. Difficulty Adaptation**: Question difficulty adjusts based on previous performance
+
+**3. Longitudinal Learning**: Progress is tracked across sessions for spaced repetition
+
+## Covered Topics
+
+Adaptive interviews cycle through three core topics:
+
+```python
+# Source: backend/agent/adaptive_controller.py:27
+TOPICS = ["DBMS", "OS", "OOPS"]
+```
+
+**Each session focuses on one topic at a time**, asking **exactly 3 questions per subtopic** before moving to the next.
+
+### DBMS (Database Management Systems)
+15 subtopics including normalization, transactions, indexing, SQL optimization
+
+### OS (Operating Systems)
+10 subtopics including process management, memory management, synchronization, file systems
+
+### OOPS (Object-Oriented Programming)
+8 subtopics including inheritance, polymorphism, SOLID principles, design patterns
+
+<Note>
+The system maintains **separate mastery scores** for each subtopic. Strong performance in "DBMS Normalization" doesn't affect your "DBMS Transactions" difficulty.
+</Note>
+
+## Strict Difficulty Matrix
+
+Adaptive difficulty follows a **9-case matrix** based on your previous answer performance:
+
+```python
+# Source: backend/agent/adaptive_controller.py:30
+_calculate_next_difficulty(question_number, previous_score, previous_difficulty)
+```
+
+### Question Progression Logic
+
+**Q1: Always MEDIUM**
+- Every subtopic session starts at medium difficulty
+- Establishes your baseline understanding
+- No prior information to adapt from yet
+
+**Q2: Based on Q1 Score**
+- Score < 0.4 (40%) → **EASY** (struggling, need fundamentals)
+- Score 0.4-0.7 (40-70%) → **MEDIUM** (keep current level)
+- Score > 0.7 (70%+) → **HARD** (ready for advanced concepts)
+
+**Q3: Based on Q2 Score**
+- Score < 0.4 → **EASY** (regardless of previous difficulty)
+- Score 0.4-0.7 → **MEDIUM** (regardless of previous difficulty)
+- Score > 0.7 → **HARD** (regardless of previous difficulty)
+
+<Tip>
+**Why this works**: If you score poorly on Q2, Q3 drops to EASY even if Q1 was HARD. The system prioritizes current performance over past success.
+</Tip>
+
+### Example Progression
+
+**Scenario 1: Strong Performance**
+- Q1 (Medium): Score 85% → Q2 = HARD
+- Q2 (Hard): Score 72% → Q3 = HARD
+- Q3 (Hard): Score 88%
+- **Result**: Mastery level increases significantly
+
+**Scenario 2: Struggling Student**
+- Q1 (Medium): Score 35% → Q2 = EASY
+- Q2 (Easy): Score 50% → Q3 = MEDIUM
+- Q3 (Medium): Score 65%
+- **Result**: Gradual improvement, mastery increases moderately
+
+**Scenario 3: Inconsistent Performance**
+- Q1 (Medium): Score 75% → Q2 = HARD
+- Q2 (Hard): Score 30% → Q3 = EASY (adaptive drop!)
+- Q3 (Easy): Score 88%
+- **Result**: System identifies knowledge gaps, focuses on fundamentals
+
+## Concept Mastery Tracking
+
+The system tracks mastery at the **concept level**, not just topic level:
+
+```python
+# Source: backend/agent/adaptive_controller.py:76
+_concept_in_answer(concept, answer_lower)
+```
+
+### How Concepts Are Detected
+
+When you answer a question, the system:
+
+**1. Extracts Expected Concepts**
+- Each question has 4-6 key concepts it expects (e.g., "mutex", "deadlock", "critical section")
+- These are technical terms that strong answers should mention
+
+**2. Analyzes Your Answer**
+- Scans your answer (case-insensitive) for each expected concept
+- Uses **synonym detection** to catch variations:
+  - "mutex" = "mutual exclusion" = "lock"
+  - "semaphore" = "counting semaphore" = "binary semaphore"
+  - "critical section" = "critical region"
+
+**3. Updates Mastery Scores**
+- **Mentioned concept**: Mastery increases (weighted by question difficulty)
+- **Missing concept**: Mastery decreases slightly
+- **Partial match**: Moderate mastery increase
+
+### Mastery Score Calculation
+
+Each concept has a mastery score (0.0 to 1.0):
+
+- **0.0-0.3**: Beginner (concept rarely mentioned correctly)
+- **0.4-0.6**: Intermediate (concept sometimes used)
+- **0.7-0.85**: Advanced (concept frequently used correctly)
+- **0.86-1.0**: Mastery (concept consistently demonstrated)
+
+<Note>
+Mastery scores **decay over time** if not reinforced. Concepts you haven't encountered in 30+ days slowly decrease in mastery, triggering review questions.
+</Note>
+
+## Subtopic Progression
+
+The system ensures comprehensive coverage:
+
+### 3-Question Cycle
+
+Every subtopic gets **exactly 3 questions** per session:
+
+```python
+# Source: backend/agent/adaptive_controller.py:24
+# Exactly 3 questions per subtopic, cycle through topics continuously
+```
+
+**Why 3 questions?**
+1. **Baseline (Q1)**: Establish current understanding at medium difficulty
+2. **Adaptation (Q2)**: Adjust based on Q1 performance
+3. **Reinforcement (Q3)**: Solidify learning at appropriate level
+
+After 3 questions, the system moves to the next subtopic (within the same topic) or cycles to the next topic.
+
+### Example Session Flow
+
+<Steps>
+  <Step title="Session Start: DBMS Topic">
+    User selects DBMS for adaptive practice
+  </Step>
+  
+  <Step title="Subtopic 1: Normalization (3 questions)">
+    - Q1 (Medium): "Explain 3NF" → Score 80%
+    - Q2 (Hard): "Convert schema to BCNF" → Score 45%
+    - Q3 (Medium): "Identify functional dependencies" → Score 70%
+    - **Mastery Update**: Normalization mastery = 0.65 (Intermediate)
+  </Step>
+  
+  <Step title="Subtopic 2: Transactions (3 questions)">
+    - Q1 (Medium): "Explain ACID properties" → Score 90%
+    - Q2 (Hard): "Solve concurrency conflict" → Score 85%
+    - Q3 (Hard): "Design transaction isolation" → Score 88%
+    - **Mastery Update**: Transactions mastery = 0.82 (Advanced)
+  </Step>
+  
+  <Step title="Subtopic 3: Indexing (3 questions)">
+    - Q1 (Medium): "B-tree vs Hash index" → Score 50%
+    - Q2 (Medium): "When to use clustered index" → Score 60%
+    - Q3 (Medium): "Optimize query with indexes" → Score 72%
+    - **Mastery Update**: Indexing mastery = 0.55 (Intermediate)
+  </Step>
+  
+  <Step title="Session Complete">
+    Covered 3 subtopics, 9 total questions
+    
+    **Next Session Recommendation**: 
+    - Focus on Indexing (lowest mastery at 0.55)
+    - Review Normalization (mid-level, needs reinforcement)
+  </Step>
+</Steps>
+
+## Longitudinal Tracking
+
+Adaptive learning doesn't reset between sessions:
+
+### Session State Persistence
+
+```python
+# Source: backend/agent/adaptive_controller.py:71
+def __init__(self):
+    self.sessions: Dict[str, AdaptiveInterviewState] = {}
+    self.subtopic_trackers: Dict[int, SubtopicTracker] = {}
+```
+
+**What's Tracked Across Sessions:**
+
+1. **User Mastery Table** (database: `UserMastery`)
+   - Concept-level mastery scores
+   - Last practice date for each concept
+   - Total exposure count
+
+2. **Question History** (database: `QuestionHistory`)
+   - All questions you've answered
+   - Your responses and scores
+   - Timestamps for spaced repetition
+
+3. **Adaptive Interview Sessions** (database: `AdaptiveInterviewSession`)
+   - Session-level performance trends
+   - Average scores per topic
+   - Completion rates
+
+4. **Subtopic Mastery** (database: `SubtopicMastery`)
+   - Mastery per subtopic (aggregated from concepts)
+   - Last practice date
+   - Recommended review date
+
+### Spaced Repetition
+
+The system implements evidence-based spaced repetition:
+
+**Fresh Concepts (first seen):**
+- Review in 1 day
+- If mastery ≥ 0.7, extend to 3 days
+
+**Intermediate Mastery (0.4-0.7):**
+- Review in 3-7 days
+- Adjust based on performance trend
+
+**High Mastery (0.7-0.85):**
+- Review in 14 days
+- Focus on edge cases and advanced applications
+
+**Mastered (0.86-1.0):**
+- Review in 30 days
+- Maintain through occasional hard questions
+
+<Tip>
+Login daily to see "Due for Review" recommendations. The system prioritizes concepts that are about to decay in mastery.
+</Tip>
+
+## Subtopic Tracker
+
+Each user has a personal `SubtopicTracker`:
+
+```python
+# Source: backend/agent/adaptive_controller.py:16
+from .subtopic_tracker import SubtopicTracker
+```
+
+### What It Tracks
+
+**Per Subtopic:**
+- **Questions Answered**: Total count (across all sessions)
+- **Average Score**: Rolling average of recent performance
+- **Mastery Level**: 0.0-1.0 scale
+- **Last Practiced**: Timestamp for decay calculation
+- **Streak**: Consecutive sessions with >70% score
+- **Weak Concepts**: Specific concepts within subtopic that need work
+
+### Adaptive Recommendations
+
+Based on tracker data, the system suggests:
+
+**"Practice Now" (Red Alert)**
+- Subtopics with mastery < 0.4
+- Subtopics not practiced in 30+ days
+- Subtopics with declining score trends
+
+**"Review Soon" (Yellow Alert)**
+- Subtopics with mastery 0.4-0.6
+- Subtopics not practiced in 14+ days
+- Subtopics with plateau (no improvement over 3 sessions)
+
+**"Maintain" (Green)**
+- Subtopics with mastery ≥ 0.7
+- Regular practice (within 7 days)
+- Consistent high scores
+
+## Semantic Deduplication
+
+The system prevents asking the same question twice:
+
+```python
+# Source: backend/agent/adaptive_controller.py:15
+from .semantic_dedup import semantic_dedup
+```
+
+### How It Works
+
+**Problem**: AI might generate very similar questions across sessions
+- "Explain mutex" vs "What is a mutex?" (semantically identical)
+- "Describe normalization" vs "What is database normalization?" (same question)
+
+**Solution**: Semantic deduplication via embeddings
+1. Each generated question is embedded (384-dimensional vector)
+2. Compared to all previously asked questions (cosine similarity)
+3. If similarity > 0.85 (very similar), question is rejected
+4. New question generated until unique
+
+**Benefits:**
+- Ensures variety in practice
+- Prevents gaming the system by memorizing answers
+- Forces coverage of different aspects of each concept
+
+<Note>
+Similar questions are allowed if the **difficulty level** differs. "What is mutex?" (Easy) and "Design a mutex-based solution for producer-consumer problem" (Hard) are semantically related but serve different learning purposes.
+</Note>
+
+## Adaptive Decision Engine
+
+The brain of the adaptive system:
+
+```python
+# Source: backend/agent/adaptive_controller.py:12
+from .adaptive_decision import AdaptiveDecisionEngine
+```
+
+### Decision Inputs
+
+For each question, the engine considers:
+
+1. **Current Session State**
+   - Question number (1, 2, or 3 in subtopic)
+   - Previous question difficulty
+   - Previous answer score
+
+2. **Historical Performance**
+   - Subtopic mastery level
+   - Concept mastery for expected keywords
+   - Recent score trend (improving vs declining)
+
+3. **Question Bank Availability**
+   - Available questions at each difficulty
+   - Questions not yet asked (via semantic dedup)
+   - Questions matching current mastery gaps
+
+### Decision Outputs
+
+**Next Question Parameters:**
+- **Difficulty**: Easy/Medium/Hard (from 9-case matrix)
+- **Subtopic**: Current or next (after 3 questions)
+- **Focus Concepts**: Specific concepts to test (from weak areas)
+- **Question Type**: Definitional, applied, or design-based
+
+## Adaptive Question Bank
+
+The source of adaptive questions:
+
+```python
+# Source: backend/agent/adaptive_controller.py:13
+from .adaptive_question_bank import AdaptiveQuestionBank
+```
+
+### Question Selection Logic
+
+**Filters Applied:**
+1. **Topic Match**: Only questions from current topic (DBMS/OS/OOPS)
+2. **Subtopic Match**: Questions from current subtopic
+3. **Difficulty Match**: Questions matching calculated difficulty
+4. **Novelty**: Questions not asked in last 30 days (via QuestionHistory)
+5. **Concept Targeting**: Questions testing weak concepts (mastery < 0.5)
+
+**Ranking Criteria:**
+- **High Priority**: Tests ≥3 weak concepts
+- **Medium Priority**: Tests 1-2 weak concepts
+- **Low Priority**: General questions (for well-mastered subtopics)
+
+**Final Selection:**
+- Top-ranked question from available pool
+- If no questions available at difficulty, adjust ±1 level
+- Fallback to general questions if all filtered out
+
+## User Dashboard
+
+Visualize your adaptive learning progress:
+
+### Mastery Overview
+
+**Topic-Level View:**
+```
+DBMS:  ████████░░ 78% (Advanced)
+OS:    ██████░░░░ 62% (Intermediate)
+OOPS:  █████░░░░░ 54% (Intermediate)
+```
+
+**Subtopic Breakdown:**
+```
+DBMS > Normalization:   ██████░░░░ 65%  [Last: 2 days ago]
+DBMS > Transactions:    ████████░░ 82%  [Last: 1 day ago]
+DBMS > Indexing:        █████░░░░░ 55%  [Last: 5 days ago] ⚠️ Review Soon
+```
+
+### Concept Mastery Grid
+
+See individual concepts:
+```
+OS > Synchronization:
+  ✓ Mutex:             ████████░░ 85% (Mastered)
+  ✓ Semaphore:         ███████░░░ 72% (Advanced)
+  ⚠ Deadlock:          █████░░░░░ 52% (Intermediate) - Practice!
+  ✗ Critical Section:  ███░░░░░░░ 38% (Beginner) - Review Now!
+```
+
+### Performance Trends
+
+Track improvement over time:
+```
+DBMS Score Trend (Last 30 Days):
+
+Week 1:  [52, 58, 61]  Avg: 57%
+Week 2:  [64, 68, 70]  Avg: 67%  ↑ +10%
+Week 3:  [72, 75, 71]  Avg: 73%  ↑ +6%
+Week 4:  [78, 82, 80]  Avg: 80%  ↑ +7%
+
+Total Improvement: +23% 🎉
+```
+
+## Best Practices
+
+### For Optimal Learning
+
+<Tip>
+**Practice Consistency**: 3-5 sessions per week is better than 10 sessions in one day. Spaced repetition requires time between sessions.
+</Tip>
+
+**Daily Practice Routine:**
+1. **Check "Due for Review"** (5 mins): See which concepts need attention
+2. **Adaptive Session** (20 mins): One topic, 3 subtopics, 9 questions
+3. **Review Weak Concepts** (10 mins): Study model answers for failed questions
+
+### Understanding Your Scores
+
+**Score vs Mastery:**
+- **Score**: Your performance on a single question (0-100%)
+- **Mastery**: Aggregate skill level in a concept/subtopic (0.0-1.0)
+
+One bad score doesn't tank mastery - it's a weighted average over time.
+
+**How Mastery Updates:**
+```python
+New Mastery = (Old Mastery × 0.7) + (Question Score × 0.3)
+```
+
+If you have 0.8 mastery and score 0.4 on a question:
+```
+New Mastery = (0.8 × 0.7) + (0.4 × 0.3) = 0.56 + 0.12 = 0.68
+```
+
+Your mastery dropped but didn't reset to 0.4. Keep practicing!
+
+### When Difficulty Seems Wrong
+
+**"Q2 was too hard after I aced Q1!"**
+- This is intentional. Scoring >70% on Q1 (Medium) means you're ready for Hard
+- Hard questions are supposed to challenge you
+- Scoring 50-70% on a Hard question is normal progress
+
+**"Q3 dropped to Easy after I did okay on Q2!"**
+- You scored 40-70% on Q2, so Q3 stays Medium (not Easy)
+- If Q3 was Easy, you likely scored &lt;40% on Q2
+- Review the Q2 model answer - you're missing fundamental concepts
+
+### Tracking Progress
+
+**Short-Term (1 week):**
+- Focus on completion rate (answer all 3 questions per subtopic)
+- Target: Average score >60% across all questions
+
+**Medium-Term (1 month):**
+- Track subtopic mastery increases
+- Target: Move 2-3 subtopics from Beginner to Intermediate
+
+**Long-Term (3 months):**
+- Track topic-level mastery
+- Target: At least one topic at Advanced (0.7+)
+- Goal: All topics at Intermediate (0.5+)
+
+## Technical Architecture
+
+### State Management
+
+**Session State** (`AdaptiveInterviewState`):
+- Current topic and subtopic
+- Question history for session
+- Answer scores and timings
+- Next question parameters
+
+**Persistent State** (Database):
+- `UserMastery`: Per-concept scores
+- `QuestionHistory`: All Q&A pairs
+- `AdaptiveInterviewSession`: Session summaries
+- `SubtopicMastery`: Per-subtopic aggregates
+
+### Analyzer Component
+
+```python
+# Source: backend/agent/adaptive_controller.py:11
+from .adaptive_analyzer import AdaptiveAnalyzer
+```
+
+**Responsibilities:**
+- Parse user answers for concept mentions
+- Calculate answer scores (0.0-1.0 scale)
+- Update mastery based on performance
+- Generate concept-level feedback
+
+### Planner Component
+
+```python
+# Source: backend/agent/adaptive_controller.py:14
+from .adaptive_planner import adaptive_planner
+```
+
+**Responsibilities:**
+- Recommend next subtopic to practice
+- Calculate optimal session length
+- Identify "due for review" concepts
+- Generate study plans based on mastery gaps
+
+## Privacy & Data
+
+**What's Stored:**
+- Your answer text (for progress review)
+- Answer scores and concept mastery
+- Question timestamps (for spaced repetition)
+- Session performance metrics
+
+**What's NOT Stored:**
+- No cross-user data sharing
+- No public leaderboards (your data is private)
+- No identifiable personal information beyond user ID
+
+**Data Retention:**
+- Active data: Indefinite (for longitudinal tracking)
+- Deleted accounts: All adaptive learning data purged within 30 days

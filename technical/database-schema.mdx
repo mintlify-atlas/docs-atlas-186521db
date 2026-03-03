@@ -1,0 +1,430 @@
+---
+title: 'Database Schema'
+description: 'Complete database schema documentation including all models, fields, relationships, and constraints'
+---
+
+## Overview
+
+The application uses **SQLAlchemy** as the ORM (Object-Relational Mapping) layer with **SQLite** as the database backend. The database schema is designed to support adaptive interview sessions, user mastery tracking, and comprehensive performance analytics.
+
+## Database Technology Stack
+
+- **ORM**: Flask-SQLAlchemy (SQLAlchemy wrapper for Flask)
+- **Database**: SQLite (file-based relational database)
+- **Location**: Configured via `SQLALCHEMY_DATABASE_URI` environment variable
+- **Migrations**: Manual schema updates via SQLAlchemy model definitions
+
+## Core Models
+
+### User Model
+
+The `User` model represents registered users in the system. It integrates with Flask-Login for authentication.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | Integer | Primary Key | Unique user identifier |
+| `username` | String(80) | Unique, Not Null | Unique username for login |
+| `email` | String(120) | Unique, Not Null | User's email address |
+| `password_hash` | String(120) | Not Null | Hashed password (bcrypt/werkzeug) |
+| `full_name` | String(100) | Nullable | User's full name |
+| `phone` | String(20) | Nullable | Contact phone number |
+| `experience_years` | Integer | Default: 0 | Years of professional experience |
+| `skills` | Text | Nullable | JSON-encoded list of skills |
+| `resume_filename` | String(255) | Nullable | Uploaded resume filename |
+| `reset_token` | String(100) | Unique, Nullable | Password reset token |
+| `reset_token_expiry` | DateTime | Nullable | Token expiration timestamp |
+| `created_at` | DateTime | Default: utcnow | Account creation timestamp |
+
+**Relationships:**
+- `interviews` → One-to-Many with `InterviewSession`
+- `masteries` → One-to-Many with `UserMastery` (via backref)
+- `adaptive_sessions` → One-to-Many with `AdaptiveInterviewSession` (via backref)
+- `question_history` → One-to-Many with `QuestionHistory` (via backref)
+- `subtopic_masteries` → One-to-Many with `SubtopicMastery` (via backref)
+- `study_plans` → One-to-Many with `StudyActionPlan` (via backref)
+
+**Example Usage:**
+
+```python
+from models import User, db
+from werkzeug.security import generate_password_hash
+
+# Create a new user
+user = User(
+    username="john_doe",
+    email="john@example.com",
+    password_hash=generate_password_hash("secure_password"),
+    full_name="John Doe",
+    experience_years=5,
+    skills=json.dumps(["Python", "SQL", "Flask"])
+)
+db.session.add(user)
+db.session.commit()
+
+# Query user
+user = User.query.filter_by(username="john_doe").first()
+print(user.to_dict())
+```
+
+---
+
+### InterviewSession Model
+
+Tracks traditional interview sessions (legacy model for basic interviews).
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | Integer | Primary Key | Unique session identifier |
+| `user_id` | Integer | Foreign Key (user.id), Not Null | Reference to User |
+| `session_type` | String(50) | Not Null | Type of interview (e.g., "technical", "behavioral") |
+| `questions` | Text | Nullable | JSON-encoded list of questions |
+| `score` | Float | Nullable | Overall interview score (0-1) |
+| `feedback` | Text | Nullable | Interview feedback text |
+| `duration` | Integer | Nullable | Session duration in seconds |
+| `created_at` | DateTime | Default: utcnow | Session start timestamp |
+| `completed_at` | DateTime | Nullable | Session completion timestamp |
+| `speech_metrics` | Text | Nullable | JSON with research-grade speech metrics |
+
+**Relationships:**
+- `user` → Many-to-One with `User`
+
+---
+
+### UserMastery Model
+
+**Critical Model**: Tracks user's mastery across topics with complete concept-level data.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | Integer | Primary Key | Unique mastery record ID |
+| `user_id` | Integer | Foreign Key (user.id), Not Null | Reference to User |
+| `topic` | String(50) | Not Null | Topic name (e.g., "DBMS", "OS") |
+| `sessions_attempted` | Integer | Default: 0 | Number of sessions for this topic |
+| `last_session_date` | DateTime | Nullable | Last session timestamp |
+
+**Mastery Scores (0-1 range):**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `mastery_level` | Float | 0.0 | Overall mastery: `semantic_avg * 0.7 + keyword_avg * 0.3` |
+| `semantic_avg` | Float | 0.0 | Exponential moving average of semantic scores |
+| `keyword_avg` | Float | 0.0 | Exponential moving average of keyword scores |
+
+**Statistics:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `questions_attempted` | Integer | 0 | Total questions answered for this topic |
+| `correct_count` | Integer | 0 | Questions with keyword score > 0.6 |
+| `avg_response_time` | Float | 0.0 | Exponential moving average of response times |
+
+**Learning Velocity:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `mastery_velocity` | Float | 0.0 | Rate of mastery change: `mastery_level - last_mastery` |
+| `last_mastery` | Float | 0.0 | Previous mastery level before last update |
+
+**Difficulty Tracking:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `current_difficulty` | String(20) | "medium" | Current difficulty level: "easy", "medium", or "hard" |
+| `consecutive_good` | Integer | 0 | Consecutive high-scoring answers (&gt;0.7) |
+| `consecutive_poor` | Integer | 0 | Consecutive low-scoring answers (&lt;0.4) |
+
+**Concept-Level Data (JSON fields):**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `concept_masteries` | Text | '{}' | **PRIMARY**: Complete concept-level mastery data (see [User Mastery Tracking](/technical/user-mastery-tracking)) |
+| `missing_concepts` | Text | '[]' | **LEGACY**: List of weak concepts (derived from `concept_masteries`) |
+| `weak_concepts` | Text | '[]' | **LEGACY**: List of weak concepts |
+| `strong_concepts` | Text | '[]' | **LEGACY**: List of strong concepts |
+| `concept_stagnation` | Text | '{}' | **LEGACY**: Concept stagnation counts |
+
+**Timestamps:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `first_attempt` | DateTime | utcnow | First attempt timestamp |
+| `last_attempt` | DateTime | utcnow | Most recent attempt timestamp |
+| `last_seen` | Float | 0.0 | Unix timestamp of last activity |
+
+**Constraints:**
+- Unique constraint on `(user_id, topic)` → One mastery record per user per topic
+
+**Relationships:**
+- `user` → Many-to-One with `User`
+
+**Example Usage:**
+
+```python
+from models import UserMastery, db
+
+# Get or create mastery record
+mastery = UserMastery.query.filter_by(
+    user_id=user.id,
+    topic="DBMS"
+).first()
+
+if not mastery:
+    mastery = UserMastery(user_id=user.id, topic="DBMS")
+    db.session.add(mastery)
+
+# Update mastery with new answer
+mastery.update_mastery(
+    semantic_score=0.85,
+    keyword_score=0.75,
+    response_time=45.0
+)
+db.session.commit()
+
+# Access concept-level data
+concepts = mastery.get_concept_masteries()
+print(f"Total concepts tracked: {len(concepts)}")
+print(f"Weak concepts: {mastery.get_weak_concepts()}")
+```
+
+---
+
+### AdaptiveInterviewSession Model
+
+Tracks enhanced adaptive interview sessions with comprehensive metrics.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | Integer | Primary Key | Unique session identifier |
+| `user_id` | Integer | Foreign Key (user.id), Not Null | Reference to User |
+| `session_id` | String(100) | Unique, Not Null, Indexed | UUID for session tracking |
+| `start_time` | DateTime | Default: utcnow | Session start timestamp |
+| `end_time` | DateTime | Nullable | Session end timestamp |
+| `duration` | Integer | Default: 0 | Total duration in seconds |
+| `questions_asked` | Integer | Default: 0 | Number of questions asked |
+| `avg_semantic` | Float | Default: 0.0 | Average semantic similarity score |
+| `avg_keyword` | Float | Default: 0.0 | Average keyword coverage score |
+| `overall_score` | Float | Default: 0.0 | `avg_semantic * 0.7 + avg_keyword * 0.3` |
+| `learning_velocity` | Float | Default: 0.0 | Rate of learning improvement |
+| `attention_score` | Float | Default: 1.0 | Attention/engagement score |
+| `topics_covered` | Text | '[]' | JSON list of topics covered |
+| `weakest_topics` | Text | '[]' | JSON list of weakest 3 topics |
+| `strongest_topics` | Text | '[]' | JSON list of strongest 3 topics |
+
+**Relationships:**
+- `user` → Many-to-One with `User`
+
+---
+
+### QuestionHistory Model
+
+Tracks every individual question asked across all sessions.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | Integer | Primary Key | Unique question record ID |
+| `user_id` | Integer | Foreign Key (user.id), Not Null, Indexed | Reference to User |
+| `session_id` | String(100) | Not Null, Indexed | Session UUID |
+| `topic` | String(50) | Not Null | Topic name |
+| `subtopic` | String(100) | Nullable | Subtopic name |
+| `question` | Text | Not Null | Question text |
+| `answer` | Text | Nullable | User's answer |
+| `expected_answer` | Text | Nullable | AI-generated expected answer |
+| `sampled_concepts` | Text | '[]' | JSON list of concepts sampled in question |
+| `semantic_score` | Float | Default: 0.0 | Semantic similarity score (0-1) |
+| `keyword_score` | Float | Default: 0.0 | Keyword coverage score (0-1) |
+| `depth` | String(20) | Default: "medium" | Answer depth analysis |
+| `confidence` | String(20) | Default: "medium" | Answer confidence level |
+| `key_terms` | Text | '[]' | JSON list of key terms mentioned |
+| `difficulty` | String(20) | Default: "medium" | Question difficulty |
+| `response_time` | Float | Default: 0.0 | Response time in seconds |
+| `timestamp` | DateTime | Default: utcnow, Indexed | Question timestamp |
+| `missing_concepts` | Text | '[]' | JSON list of concepts missing from answer |
+
+**Relationships:**
+- `user` → Many-to-One with `User`
+
+---
+
+### SubtopicMastery Model
+
+Tracks mastery at the subtopic level within each topic.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | Integer | Primary Key | Unique record ID |
+| `user_id` | Integer | Foreign Key (user.id), Not Null, Indexed | Reference to User |
+| `topic` | String(50) | Not Null | Parent topic name |
+| `subtopic` | String(200) | Not Null | Subtopic name |
+| `mastery_level` | Float | Default: 0.0 | Subtopic mastery score (0-1) |
+| `attempts` | Integer | Default: 0 | Number of attempts |
+| `last_asked` | DateTime | Default: utcnow | Last question timestamp |
+| `subtopic_status` | String(20) | Default: 'not_started' | Status: 'not_started', 'ongoing', 'mastered' |
+| `concept_data` | Text | '{}' | JSON with concept-level data for quick access |
+
+**Constraints:**
+- Unique constraint on `(user_id, topic, subtopic)`
+
+**Relationships:**
+- `user` → Many-to-One with `User`
+
+---
+
+### StudyActionPlan Model
+
+Stores AI-generated personalized study plans for users.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | Integer | Primary Key | Unique plan ID |
+| `user_id` | Integer | Foreign Key (user.id), Not Null, Indexed | Reference to User |
+| `days` | Integer | Not Null | Plan duration in days |
+| `topics` | String(255) | Not Null | Comma-separated list of topics |
+| `plan_markdown` | Text | Not Null | Full plan in Markdown format |
+| `created_at` | DateTime | Default: utcnow, Indexed | Creation timestamp |
+
+**Relationships:**
+- `user` → Many-to-One with `User`
+
+**Example Usage:**
+
+```python
+plan = StudyActionPlan(
+    user_id=user.id,
+    days=30,
+    topics="DBMS,OS,Networks",
+    plan_markdown="# 30-Day Study Plan\n\n## Week 1..." 
+)
+db.session.add(plan)
+db.session.commit()
+```
+
+---
+
+### DebuggingSession Model
+
+Tracks full debugging interview sessions.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | Integer | Primary Key | Unique session ID |
+| `user_id` | Integer | Foreign Key (user.id), Not Null | Reference to User |
+| `start_time` | DateTime | Default: utcnow | Session start |
+| `end_time` | DateTime | Nullable | Session end |
+| `count` | Integer | Default: 0 | Number of challenges |
+| `avg_score` | Float | Default: 0.0 | Average score across challenges |
+| `summary` | Text | Nullable | Session summary |
+
+**Relationships:**
+- `challenges` → One-to-Many with `DebuggingChallenge` (cascade delete)
+
+---
+
+### DebuggingChallenge Model
+
+Tracks individual debugging challenges within a session.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | Integer | Primary Key | Unique challenge ID |
+| `session_id` | Integer | Foreign Key (debugging_session.id), Not Null | Reference to DebuggingSession |
+| `language` | String(20) | Default: 'python' | Programming language |
+| `topic` | String(100) | Nullable | Topic/concept being tested |
+| `buggy_code` | Text | Not Null | Code with bug |
+| `expected_answer` | Text | Not Null | Expected explanation |
+| `correct_code` | Text | Nullable | Corrected code |
+| `user_explanation` | Text | Nullable | User's bug explanation |
+| `ai_score` | Float | Default: 0.0 | AI-evaluated score |
+| `ai_feedback` | Text | Nullable | AI feedback |
+| `created_at` | DateTime | Default: utcnow | Creation timestamp |
+
+**Relationships:**
+- `session` → Many-to-One with `DebuggingSession`
+
+---
+
+## Database Indexes
+
+The following indexes are automatically created for optimal query performance:
+
+- `user.username` (unique index)
+- `user.email` (unique index)
+- `user.reset_token` (unique index)
+- `adaptive_interview_session.session_id` (unique index)
+- `adaptive_interview_session.user_id`
+- `question_history.user_id`
+- `question_history.session_id`
+- `question_history.timestamp`
+- `subtopic_mastery.user_id`
+- `study_action_plan.user_id`
+- `study_action_plan.created_at`
+
+## Common Database Operations
+
+### Initialize Database
+
+```python
+from models import db
+from app import app
+
+with app.app_context():
+    db.create_all()
+    print("Database initialized!")
+```
+
+### Query with Relationships
+
+```python
+# Get user with all mastery records
+user = User.query.filter_by(id=1).first()
+for mastery in user.masteries:
+    print(f"{mastery.topic}: {mastery.mastery_level:.2f}")
+
+# Get recent question history
+recent_questions = QuestionHistory.query.filter_by(
+    user_id=user.id
+).order_by(QuestionHistory.timestamp.desc()).limit(10).all()
+```
+
+### Bulk Insert
+
+```python
+questions = [
+    QuestionHistory(
+        user_id=user.id,
+        session_id=session_id,
+        topic="DBMS",
+        question=q["text"],
+        semantic_score=q["score"]
+    )
+    for q in question_data
+]
+db.session.bulk_save_objects(questions)
+db.session.commit()
+```
+
+## Database Configuration
+
+Typical SQLAlchemy configuration in `app.py`:
+
+```python
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
+    'DATABASE_URL',
+    'sqlite:///interview_app.db'
+)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ECHO'] = False  # Set to True for SQL logging
+
+db.init_app(app)
+```
+
+## Migration Best Practices
+
+1. **Always backup** the database before schema changes
+2. **Test migrations** on a development database first
+3. **Use transactions** for data migrations
+4. **Add new fields as nullable** first, then populate, then add constraints
+
+## Related Documentation
+
+- [User Mastery Tracking](/technical/user-mastery-tracking) - Deep dive into the UserMastery model and concept tracking
+- [Adaptive Learning](/features/adaptive-learning) - How the database supports adaptive learning

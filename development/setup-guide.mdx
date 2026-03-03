@@ -1,0 +1,220 @@
+---
+title: Development Setup Guide
+description: Complete guide to setting up your local development environment for the CS Interview Assistant
+---
+
+This guide provides detailed instructions for setting up the CS Interview Assistant development environment. Follow these steps to get both the backend and frontend running locally.
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed on your system:
+
+- **Python 3.8+**: Required for the Flask backend and AI engines
+- **Node.js & npm**: Required for the React frontend
+- **Git**: For cloning the repository and version control
+- **Mistral API Key**: Required for AI-powered features. [Get it here](https://console.mistral.ai/)
+
+<Tip>
+You can check your Python version with `python --version` and Node.js version with `node --version`.
+</Tip>
+
+## Complete Setup Flow
+
+<Steps>
+  <Step title="Clone the Repository">
+    First, clone the project repository to your local machine:
+    
+    ```bash
+    git clone <repository-url>
+    cd be
+    ```
+    
+    Replace `<repository-url>` with the actual repository URL.
+  </Step>
+
+  <Step title="Set Up Python Virtual Environment">
+    Create and activate a virtual environment to isolate project dependencies:
+    
+    **On Windows (PowerShell):**
+    ```powershell
+    python -m venv myenv
+    myenv\Scripts\activate
+    ```
+    
+    **On macOS/Linux:**
+    ```bash
+    python3 -m venv myenv
+    source myenv/bin/activate
+    ```
+    
+    You should see `(myenv)` in your terminal prompt when the environment is activated.
+  </Step>
+
+  <Step title="Install Backend Dependencies">
+    Install all required Python packages from the requirements file:
+    
+    ```bash
+    pip install -r requirements.txt
+    ```
+    
+    This installs:
+    - **Flask** web framework and extensions (CORS, SQLAlchemy, SocketIO)
+    - **Mistral AI** and OpenAI clients for LLM integration
+    - **FAISS** and sentence-transformers for vector search
+    - **Audio processing** libraries (librosa, pydub, faster-whisper)
+    - **Document processing** libraries (PyPDF2, python-docx)
+    - Additional utilities for security, networking, and NLP
+  </Step>
+
+  <Step title="Configure Environment Variables">
+    Create a `.env` file in the root `be` directory with your API keys:
+    
+    ```env
+    MISTRAL_API_KEY=your_mistral_api_key_here
+    ```
+    
+    <Warning>
+    Never commit your `.env` file to version control. It should already be in `.gitignore`.
+    </Warning>
+  </Step>
+
+  <Step title="Build the Knowledge Base Index">
+    If this is your first time running the project or the technical interview section is empty, build the knowledge base:
+    
+    **Option 1: If you have existing raw data**
+    ```bash
+    python scripts/prepare_kb.py
+    python scripts/reindex_mistral.py
+    ```
+    
+    **Option 2: If kb_clean.json already exists**
+    ```bash
+    python scripts/reindex_mistral.py
+    ```
+    
+    This creates the `data/processed/faiss_mistral` directory with FAISS indices for fast semantic search.
+    
+    <Note>
+    The knowledge base covers Operating Systems, DBMS, and Object-Oriented Programming topics.
+    </Note>
+  </Step>
+
+  <Step title="Install Frontend Dependencies">
+    Navigate to the frontend directory and install npm packages:
+    
+    ```bash
+    cd frontend
+    npm install
+    ```
+    
+    This installs:
+    - React 19+ and React Router for UI framework
+    - Axios for API communication
+    - Socket.IO client for real-time features
+    - React Three Fiber for 3D avatar rendering
+    - Markdown rendering and syntax highlighting
+  </Step>
+
+  <Step title="Start the Development Servers">
+    You need **two terminal windows** running simultaneously.
+    
+    **Terminal A - Backend Server:**
+    ```bash
+    # From the root 'be' directory
+    python backend/app.py
+    ```
+    
+    The backend will start on `http://localhost:5000` and automatically initialize the SQLite database at `instance/interview_prep.db`.
+    
+    **Terminal B - Frontend Server:**
+    ```bash
+    # From the 'be/frontend' directory
+    cd frontend
+    npm start
+    ```
+    
+    The frontend will open automatically in your browser at `http://localhost:3000`.
+  </Step>
+
+  <Step title="Verify the Setup">
+    Once both servers are running:
+    
+    1. Navigate to `http://localhost:3000`
+    2. Create a new user account (the database starts fresh)
+    3. Upload a resume to test the document processing
+    4. Try the different interview modes to verify AI integration
+    
+    <Check>
+    If you can sign up, upload a resume, and ask a technical question, your setup is complete!
+    </Check>
+  </Step>
+</Steps>
+
+## Testing Setup
+
+The project includes basic React testing setup:
+
+```bash
+# Run frontend tests
+cd frontend
+npm test
+```
+
+Currently, the project has minimal test coverage with `App.test.js` as a starting point.
+
+<Info>
+Consider adding more comprehensive tests for components and API endpoints as you develop new features.
+</Info>
+
+## Development Tips
+
+### Hot Reload
+- **Frontend**: Automatically reloads on file changes (React Fast Refresh)
+- **Backend**: Restart `app.py` manually after code changes, or use a tool like `flask run` with debug mode
+
+### Database Management
+- The SQLite database is located at `instance/interview_prep.db`
+- To reset the database, simply delete this file and restart the backend
+- Database migrations are handled automatically on startup
+
+### Adding New Data
+To refresh or expand the knowledge base:
+
+1. Add JSON files to `data/raw/`
+2. Run `python scripts/prepare_kb.py` to process new data
+3. Run `python scripts/reindex_mistral.py` to rebuild the FAISS index
+
+### Debugging
+- **Backend logs**: Check the terminal running `app.py`
+- **Frontend logs**: Open browser developer console (F12)
+- **Network requests**: Use browser DevTools Network tab to inspect API calls
+- **Database inspection**: Use SQLite browser tools to query `interview_prep.db`
+
+## Common Issues
+
+### Virtual Environment Not Activating
+Make sure you're using the correct activation command for your OS and shell.
+
+### Port Already in Use
+- Frontend (3000): Change port with `PORT=3001 npm start`
+- Backend (5000): Modify `app.py` or kill the process using the port
+
+### Missing API Key Error
+Ensure your `.env` file is in the root `be` directory and contains a valid `MISTRAL_API_KEY`.
+
+### FAISS Index Not Found
+Run the indexing script: `python scripts/reindex_mistral.py`
+
+### Module Import Errors
+Reactivate your virtual environment and reinstall dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+## Next Steps
+
+Now that your development environment is set up:
+
+- Explore the [Project Structure](/development/project-structure) to understand the codebase
+- Learn how to [Add New Features](/development/adding-features)
+- Review the [API Authentication](/api/authentication) and [Interview Endpoints](/api/interview-endpoints) for endpoint details

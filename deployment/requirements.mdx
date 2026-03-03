@@ -1,0 +1,296 @@
+---
+title: 'System Requirements'
+description: 'Hardware, software, and dependency requirements for the interview preparation platform'
+---
+
+## Overview
+
+This page outlines all system requirements, dependencies, and hardware specifications needed to run the CS Interview Assistant platform in both development and production environments.
+
+## System Requirements
+
+### Operating System
+
+- **Linux**: Ubuntu 20.04+ or any modern distribution
+- **macOS**: 10.15 (Catalina) or later
+- **Windows**: Windows 10/11 with WSL2 recommended for development
+
+### Runtime Environments
+
+<ParamField path="Python" type="version" required>
+  **Version 3.8 or higher** required for backend services
+  
+  Recommended: Python 3.10+ for optimal performance with async features
+</ParamField>
+
+<ParamField path="Node.js" type="version" required>
+  **Version 14.x or higher** required for frontend build tools
+  
+  Recommended: Node.js 18.x LTS or 20.x LTS
+</ParamField>
+
+<ParamField path="npm" type="version" required>
+  **Version 6.x or higher** required (bundled with Node.js)
+  
+  Recommended: npm 9.x or later
+</ParamField>
+
+## Backend Dependencies
+
+All backend dependencies are specified in `requirements.txt`. Install with:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Web Framework & Server
+
+Core Flask framework and extensions for the API server:
+
+- **flask** (3.1.3) - Core web framework
+- **flask-cors** (6.0.2) - Cross-Origin Resource Sharing support
+- **flask-sqlalchemy** (3.1.1) - Database ORM integration
+- **flask-login** (0.6.3) - User session management
+- **flask-socketio** (5.6.1) - WebSocket support for real-time features
+- **eventlet** (0.40.4) - Concurrent networking library
+- **werkzeug** (3.1.6) - WSGI utilities
+
+### Authentication & Security
+
+Libraries for user authentication and data encryption:
+
+- **PyJWT** (2.11.0) - JSON Web Token implementation
+- **cryptography** (46.0.5) - Cryptographic primitives
+
+### AI & Large Language Models
+
+Mistral AI integration and supporting libraries:
+
+- **mistralai** (1.12.4) - Official Mistral AI Python client
+- **openai** (1.65.0) - OpenAI API compatibility layer
+- **tenacity** (9.1.4) - Retry logic for API calls
+- **pydantic** (2.12.5) - Data validation using Python type hints
+
+<Note>
+  The **MISTRAL_API_KEY** environment variable must be set for AI features to work. See [Environment Variables](/deployment/environment-variables) for details.
+</Note>
+
+### Machine Learning & NLP
+
+Libraries for vector embeddings, semantic search, and text processing:
+
+- **numpy** (2.4.2) - Numerical computing
+- **faiss-cpu** (1.13.2) - Vector similarity search and clustering
+- **sentence-transformers** (5.2.3) - State-of-the-art sentence embeddings
+- **scikit-learn** (1.8.0) - Machine learning utilities
+- **torch** (2.10.0) - PyTorch deep learning framework
+- **spacy** (3.8.11) - Industrial-strength NLP
+- **langchain-text-splitters** (1.1.1) - Text chunking for RAG
+
+<Warning>
+  **torch** and **sentence-transformers** are large packages (1-2GB combined). Ensure sufficient disk space during installation.
+</Warning>
+
+### Audio Processing & Speech-to-Text
+
+Libraries for audio analysis and transcription:
+
+- **librosa** (0.11.0) - Audio analysis and feature extraction
+- **pydub** (0.25.1) - Audio file manipulation
+- **faster-whisper** (1.2.1) - Fast Whisper implementation for transcription
+- **soundfile** (0.13.1) - Audio file I/O
+
+### Document Processing
+
+Libraries for resume and document parsing:
+
+- **PyPDF2** (3.0.1) - PDF document processing
+- **python-docx** (1.2.0) - Microsoft Word document processing
+
+### Networking & Utilities
+
+- **requests** (2.32.5) - HTTP library
+- **websocket-client** (1.9.0) - WebSocket client
+- **websockets** (16.0) - WebSocket server implementation
+- **python-dotenv** (1.2.1) - Environment variable management
+- **unidecode** (1.4.0) - Unicode text transliteration
+- **regex** (2026.2.19) - Advanced regular expressions
+- **tqdm** (4.67.3) - Progress bars
+- **colorama** (0.4.6) - Terminal color output
+
+## Frontend Dependencies
+
+All frontend dependencies are specified in `frontend/package.json`. Install with:
+
+```bash
+cd frontend
+npm install
+```
+
+### Core Framework
+
+- **react** (19.2.0) - UI library
+- **react-dom** (19.2.0) - React DOM renderer
+- **react-router-dom** (7.9.4) - Client-side routing
+- **react-scripts** (5.0.1) - Create React App build tools
+
+### UI Components & Visualization
+
+- **@react-three/fiber** (9.5.0) - React renderer for Three.js
+- **@react-three/drei** (10.7.7) - Useful helpers for react-three-fiber
+- **three** (0.183.1) - 3D graphics library
+- **lucide-react** (0.575.0) - Icon library
+
+### Real-time Communication
+
+- **socket.io-client** (4.8.3) - WebSocket client for real-time features
+- **axios** (1.12.2) - HTTP client
+
+### Content Rendering
+
+- **react-markdown** (10.1.0) - Markdown renderer
+- **remark-gfm** (4.0.1) - GitHub Flavored Markdown support
+- **react-syntax-highlighter** (16.1.1) - Code syntax highlighting
+
+### Testing
+
+- **@testing-library/react** (16.3.0) - React testing utilities
+- **@testing-library/jest-dom** (6.9.1) - Custom Jest matchers
+- **@testing-library/user-event** (13.5.0) - User interaction simulation
+
+## Hardware Requirements
+
+### Minimum Requirements (Development)
+
+<ParamField path="CPU" type="hardware">
+  Dual-core processor (2.0 GHz or higher)
+</ParamField>
+
+<ParamField path="RAM" type="hardware">
+  **8 GB minimum**
+  
+  - 4 GB for Python runtime and ML models
+  - 2 GB for FAISS indices (scales with knowledge base size)
+  - 2 GB for frontend build tools and Node.js
+</ParamField>
+
+<ParamField path="Storage" type="hardware">
+  **10 GB minimum free space**
+  
+  - 3 GB for Python dependencies (PyTorch, transformers)
+  - 2 GB for Node.js dependencies
+  - 2 GB for FAISS indices and knowledge base
+  - 1 GB for database and user uploads
+  - 2 GB for temporary files and build artifacts
+</ParamField>
+
+### Recommended Requirements (Production)
+
+<ParamField path="CPU" type="hardware">
+  Quad-core processor (3.0 GHz or higher)
+  
+  - Multi-core CPU recommended for concurrent user sessions
+  - SSE4.2 instruction set for optimized FAISS operations
+</ParamField>
+
+<ParamField path="RAM" type="hardware">
+  **16 GB or higher**
+  
+  - 6 GB for Python runtime and ML models
+  - 4 GB for FAISS indices (allows for larger knowledge bases)
+  - 2 GB for concurrent WebSocket connections
+  - 4 GB for OS and other services
+</ParamField>
+
+<ParamField path="Storage" type="hardware">
+  **50 GB+ SSD storage**
+  
+  - SSD strongly recommended for FAISS index performance
+  - Additional space scales with number of user uploads and sessions
+</ParamField>
+
+### Optional: GPU Acceleration
+
+<ParamField path="GPU" type="hardware" optional>
+  **NVIDIA GPU with CUDA support**
+  
+  For significantly faster FAISS operations, install `faiss-gpu` instead of `faiss-cpu`:
+  
+  ```bash
+  pip uninstall faiss-cpu
+  pip install faiss-gpu
+  ```
+  
+  **Requirements:**
+  - CUDA 11.0 or higher
+  - 4+ GB VRAM
+  - NVIDIA driver 450.x or higher
+</ParamField>
+
+<Info>
+  GPU acceleration is **optional** but can improve RAG query performance by 5-10x for large knowledge bases.
+</Info>
+
+## Development vs Production
+
+### Development Environment
+
+For local development, minimum requirements are sufficient:
+
+- Use SQLite database (default configuration)
+- Use `faiss-cpu` for vector search
+- Single-threaded Flask development server
+- React development server with hot reload
+
+### Production Environment
+
+Production deployments should meet recommended requirements plus:
+
+- **PostgreSQL** database instead of SQLite
+- **Gunicorn** or **uWSGI** as WSGI server
+- **Nginx** reverse proxy for static files and load balancing
+- **Redis** for session management (optional)
+- Process manager like **systemd** or **supervisord**
+
+See [Production Setup](/deployment/production-setup) for detailed production configuration.
+
+## Verification
+
+### Verify Python Installation
+
+```bash
+python --version  # Should be 3.8+
+pip --version
+```
+
+### Verify Node.js Installation
+
+```bash
+node --version  # Should be 14+
+npm --version
+```
+
+### Verify Dependencies Installation
+
+```bash
+# Backend
+pip list | grep flask
+pip list | grep faiss
+pip list | grep mistralai
+
+# Frontend
+cd frontend
+npm list react
+npm list socket.io-client
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="gear" href="/deployment/environment-variables">
+    Configure API keys and application settings
+  </Card>
+  <Card title="Production Setup" icon="server" href="/deployment/production-setup">
+    Deploy to production environment
+  </Card>
+</CardGroup>

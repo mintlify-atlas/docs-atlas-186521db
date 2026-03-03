@@ -1,0 +1,173 @@
+---
+title: Resume Analysis
+description: Upload your resume and get personalized interview preparation tailored to your experience
+---
+
+## Overview
+
+The Resume Analysis feature automatically extracts key information from your resume and uses it to personalize your entire interview preparation experience. By understanding your skills, projects, and experience level, the platform generates targeted questions that match real interview scenarios.
+
+## How to Upload Your Resume
+
+<Steps>
+  <Step title="Navigate to the Resume Upload Section">
+    From your dashboard, locate the resume upload area. The system accepts common document formats (PDF, DOCX, TXT).
+  </Step>
+  
+  <Step title="Upload Your Resume File">
+    Click the upload button and select your resume file. The platform will process it immediately and extract relevant information.
+  </Step>
+  
+  <Step title="Add Job Description (Optional)">
+    For even more targeted preparation, paste the job description of a role you're applying for. This allows the system to align questions with the specific position requirements.
+  </Step>
+  
+  <Step title="Review Extracted Information">
+    The system will display extracted skills, technologies, and experience level. Verify this information is accurate for best results.
+  </Step>
+</Steps>
+
+## What Gets Extracted
+
+When you upload your resume, the platform performs intelligent text processing:
+
+### Intelligent Chunking
+- Your resume is split into **500-character chunks** with 50-character overlap
+- This ensures context is preserved across section boundaries
+- Each chunk is stored with metadata (user ID, chunk position, source type)
+
+### Vector Embeddings
+- Creates semantic embeddings using the `all-MiniLM-L6-v2` model
+- Enables similarity-based matching between your experience and question topics
+- Embeddings are normalized for accurate cosine similarity calculations
+
+### FAISS Index Creation
+- Builds a personal FAISS vector index for fast retrieval
+- Uses Inner Product similarity (cosine with normalized vectors)
+- Stored separately per user at `data/processed/resume_faiss/resume_index_{user_id}.faiss`
+
+<Note>
+Your resume data is processed locally and stored securely. Each user has a separate FAISS index that's never shared with other users.
+</Note>
+
+## How It Personalizes Your Experience
+
+### 1. Targeted Mock Interview Questions
+
+When generating interview questions, the system:
+- Searches your resume chunks for relevant experience (top 5 matches)
+- References your actual projects and technologies in questions
+- Matches question difficulty to your experience level
+- Combines resume context with job description requirements
+
+Example: If your resume mentions "React Hooks" and "state management," you might get: 
+*"In your React project, how did you handle complex state management? Walk me through your decision-making process."*
+
+### 2. Job Description Alignment
+
+When you provide a job description:
+- Creates a separate embedding for the JD
+- Stored at `data/processed/resume_faiss/jd_embedding_{user_id}.npy`
+- Questions reference both your experience AND the target role requirements
+- Helps identify skill gaps between your background and the position
+
+### 3. Contextual Evaluation
+
+During answer evaluation, your resume context is used to:
+- Provide more relevant feedback based on your background
+- Suggest improvements tied to your actual experience level
+- Generate model answers that match your seniority
+
+## Example Workflow
+
+<Steps>
+  <Step title="Upload Resume">
+    You upload a resume mentioning "Python, FastAPI, PostgreSQL, 2 years experience"
+  </Step>
+  
+  <Step title="System Processing">
+    The platform creates 8 chunks, generates embeddings, and builds your FAISS index (384 dimensions)
+  </Step>
+  
+  <Step title="Add Job Description">
+    You paste a Senior Backend Engineer JD requiring "Python, microservices, database optimization"
+  </Step>
+  
+  <Step title="Personalized Questions">
+    Mock interview generates questions like:
+    - "Explain how you optimized database queries in your FastAPI projects"
+    - "Describe your experience with microservices. What challenges did you face?"
+  </Step>
+  
+  <Step title="Tailored Feedback">
+    After answering, you receive feedback calibrated to a 2-year experience level, with suggestions for senior-level depth
+  </Step>
+</Steps>
+
+## Behind the Scenes
+
+### Resume Processing Pipeline
+
+```python
+# Source: backend/resume_processor.py:29
+process_resume_for_faiss(resume_text, user_id)
+```
+
+1. **Text Splitting**: Uses `RecursiveCharacterTextSplitter` with configurable chunk sizes
+2. **Embedding Generation**: Each chunk gets a 384-dimensional vector
+3. **Index Construction**: FAISS IndexFlatIP for cosine similarity
+4. **Metadata Storage**: Chunks stored with IDs, positions, and user associations
+
+### Semantic Search
+
+```python
+# Source: backend/resume_processor.py:77
+search_resume_faiss(query, user_id, top_k=5)
+```
+
+When generating questions:
+- Query embedding is created for the question context
+- FAISS performs fast similarity search across your resume chunks
+- Top 5 most relevant chunks are retrieved with similarity scores
+- Results inform question generation and expected answer keywords
+
+<Tip>
+For best results, include specific technologies, project outcomes, and quantifiable achievements in your resume. The more detailed your resume, the more personalized your questions will be.
+</Tip>
+
+## Managing Your Data
+
+### Updating Your Resume
+- You can re-upload anytime to update your profile
+- The system will recreate your FAISS index with the new information
+- Previous index is overwritten automatically
+
+### Removing Resume Data
+- Use the profile settings to delete your resume data
+- This removes both the FAISS index and metadata files
+- Job description embeddings are deleted separately if needed
+
+<Note>
+Deleting resume data will make future questions less personalized, as the system won't have context about your specific experience.
+</Note>
+
+## Technical Details
+
+### Storage Structure
+
+Per user, the system maintains:
+- `resume_index_{user_id}.faiss` - Vector index file
+- `resume_metas_{user_id}.json` - Chunk metadata with text and positions
+- `jd_embedding_{user_id}.npy` - Job description vector (if provided)
+- `jd_text_{user_id}.txt` - Original JD text for reference
+
+### Performance
+- Embedding generation: ~100-200ms per resume
+- Search latency: &lt;10ms for similarity queries
+- Index size: ~4KB per 1000 words of resume text
+
+### Privacy & Security
+- All resume data is stored with user-specific identifiers
+- FAISS indices are isolated per user
+- No cross-user data leakage possible
+- You control when to upload, update, or delete your data

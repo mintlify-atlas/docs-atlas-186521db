@@ -1,0 +1,649 @@
+---
+title: 'Adding New Topics'
+description: 'Extend the knowledge base with new domains beyond DBMS, OOP, and OS'
+---
+
+## Overview
+
+The knowledge base currently supports three domains: **DBMS**, **OOPs**, and **OS**. This guide shows you how to add new topics like Networking, Data Structures, Algorithms, or any other computer science domain.
+
+## Process Overview
+
+1. Update taxonomy structure
+2. Add keyword matching rules
+3. Prepare raw data files
+4. Update topic detection logic
+5. Run preparation and indexing
+6. Test and validate
+
+## Step 1: Update Taxonomy
+
+Edit `source/config/taxonomy.json` to add your new topic and its subtopics.
+
+### Current Structure
+
+```json
+{
+  "topics": [
+    {
+      "name": "DBMS",
+      "subtopics": ["ER Modeling", "DBMS Architecture", ...]
+    },
+    {
+      "name": "OOPs",
+      "subtopics": ["Classes", "Objects", ...]
+    },
+    {
+      "name": "OS",
+      "subtopics": ["Processes", "Threads", ...]
+    }
+  ]
+}
+```
+
+### Adding a New Topic: Networking
+
+```json
+{
+  "topics": [
+    {
+      "name": "DBMS",
+      "subtopics": ["ER Modeling", "DBMS Architecture", ...]
+    },
+    {
+      "name": "OOPs",
+      "subtopics": ["Classes", "Objects", ...]
+    },
+    {
+      "name": "OS",
+      "subtopics": ["Processes", "Threads", ...]
+    },
+    {
+      "name": "Networking",
+      "subtopics": [
+        "OSI Model",
+        "TCP/IP",
+        "HTTP/HTTPS",
+        "DNS",
+        "Routing",
+        "Network Security",
+        "Network Protocols",
+        "Socket Programming",
+        "Load Balancing",
+        "CDN"
+      ]
+    }
+  ]
+}
+```
+
+### Subtopic Organization Best Practices
+
+- **Start broad, then specific**: Begin with foundational concepts, then add specialized topics
+- **Aim for 8-15 subtopics**: Too few limits organization; too many creates confusion
+- **Use clear, standard terminology**: Stick to industry-standard names
+- **Avoid overlap**: Each subtopic should be distinct
+- **Consider difficulty progression**: Organize from beginner to advanced when possible
+
+## Step 2: Add Keyword Rules
+
+Edit `source/config/topic_rules.json` to define how questions map to subtopics.
+
+### Rule Structure
+
+```json
+{
+  "keywords": ["list", "of", "keywords"],
+  "topic": "TopicName",
+  "subtopic": "Subtopic Name"
+}
+```
+
+### Example: Networking Rules
+
+Add these rules to the existing array in `topic_rules.json`:
+
+```json
+[
+  {
+    "keywords": [
+      "osi model",
+      "osi",
+      "seven layers",
+      "application layer",
+      "presentation layer",
+      "session layer",
+      "transport layer",
+      "network layer",
+      "data link layer",
+      "physical layer"
+    ],
+    "topic": "Networking",
+    "subtopic": "OSI Model"
+  },
+  {
+    "keywords": [
+      "tcp",
+      "ip",
+      "tcp/ip",
+      "transmission control protocol",
+      "internet protocol",
+      "tcp handshake",
+      "three way handshake"
+    ],
+    "topic": "Networking",
+    "subtopic": "TCP/IP"
+  },
+  {
+    "keywords": [
+      "http",
+      "https",
+      "ssl",
+      "tls",
+      "rest",
+      "api",
+      "status code",
+      "get",
+      "post",
+      "put",
+      "delete"
+    ],
+    "topic": "Networking",
+    "subtopic": "HTTP/HTTPS"
+  },
+  {
+    "keywords": [
+      "dns",
+      "domain name system",
+      "domain name",
+      "dns resolution",
+      "nameserver",
+      "a record",
+      "cname"
+    ],
+    "topic": "Networking",
+    "subtopic": "DNS"
+  },
+  {
+    "keywords": [
+      "routing",
+      "router",
+      "routing protocol",
+      "bgp",
+      "ospf",
+      "rip",
+      "routing table"
+    ],
+    "topic": "Networking",
+    "subtopic": "Routing"
+  },
+  {
+    "keywords": [
+      "firewall",
+      "vpn",
+      "encryption",
+      "network security",
+      "intrusion detection",
+      "ddos",
+      "packet filtering"
+    ],
+    "topic": "Networking",
+    "subtopic": "Network Security"
+  },
+  {
+    "keywords": [
+      "protocol",
+      "udp",
+      "ftp",
+      "smtp",
+      "pop3",
+      "imap",
+      "ssh",
+      "telnet"
+    ],
+    "topic": "Networking",
+    "subtopic": "Network Protocols"
+  },
+  {
+    "keywords": [
+      "socket",
+      "socket programming",
+      "client server",
+      "port",
+      "bind",
+      "listen",
+      "accept"
+    ],
+    "topic": "Networking",
+    "subtopic": "Socket Programming"
+  },
+  {
+    "keywords": [
+      "load balancer",
+      "load balancing",
+      "reverse proxy",
+      "nginx",
+      "round robin",
+      "least connections"
+    ],
+    "topic": "Networking",
+    "subtopic": "Load Balancing"
+  },
+  {
+    "keywords": [
+      "cdn",
+      "content delivery network",
+      "edge server",
+      "caching",
+      "cloudflare"
+    ],
+    "topic": "Networking",
+    "subtopic": "CDN"
+  }
+]
+```
+
+### Keyword Selection Tips
+
+1. **Include variations**: Add singular/plural, abbreviations, full names
+2. **Use 5-15 keywords per rule**: More keywords = better matching
+3. **Include domain-specific jargon**: Technical terms users will search for
+4. **Test with lowercase**: All matching is case-insensitive
+5. **Avoid overly generic terms**: "network" alone is too broad
+6. **Include common misspellings**: If users commonly misspell terms
+
+## Step 3: Prepare Raw Data
+
+Create a JSON file in `source/data/raw/` with your questions and answers.
+
+### File Naming Convention
+
+Name the file to match your topic for automatic detection:
+
+- `networking_qna.json` → Topic: Networking
+- `datastructures_qna.json` → Topic: Data Structures
+- `algorithms_qna.json` → Topic: Algorithms
+
+### Data Format
+
+```json
+[
+  {
+    "id": 1,
+    "question": "What is the OSI model?",
+    "answer": "The OSI (Open Systems Interconnection) model is a conceptual framework that standardizes the functions of a communication system into seven abstraction layers..."
+  },
+  {
+    "id": 2,
+    "question": "What is the difference between TCP and UDP?",
+    "answer": "TCP (Transmission Control Protocol) is connection-oriented and guarantees delivery, while UDP (User Datagram Protocol) is connectionless and does not guarantee delivery..."
+  },
+  {
+    "id": 3,
+    "question": "How does DNS work?",
+    "answer": "DNS (Domain Name System) translates human-readable domain names into IP addresses. When you enter a URL, your browser queries DNS servers to find the corresponding IP address..."
+  }
+]
+```
+
+### Data Quality Guidelines
+
+- **Clear questions**: Use natural language questions users might ask
+- **Comprehensive answers**: Provide complete, accurate information
+- **Consistent formatting**: Follow the same structure for all entries
+- **Unique IDs**: Ensure each question has a unique identifier
+- **Avoid HTML**: Or accept that it will be stripped during normalization
+
+## Step 4: Update Topic Detection
+
+Edit `source/scripts/prepare_kb.py` to recognize your new topic.
+
+### Modify topic_from_filename()
+
+Find the function around line 67 and add your topic:
+
+```python
+def topic_from_filename(fname: str) -> str:
+    fname = fname.lower()
+    if "database" in fname or "dbms" in fname:
+        return "DBMS"
+    if "oops" in fname:
+        return "OOPs"
+    if "os" in fname:
+        return "OS"
+    if "networking" in fname or "network" in fname:
+        return "Networking"
+    return "uncategorized"
+```
+
+### Add Fallback Subtopic
+
+In the `assign_subtopic()` function (around line 129), add a fallback:
+
+```python
+fallback = {
+    "DBMS": "DBMS Architecture",
+    "OOPs": "Classes",
+    "OS": "Processes",
+    "Networking": "OSI Model"  # Add this line
+}
+```
+
+### Optional: Add Refinement Logic
+
+If your topic has overlapping concepts, add disambiguation in `refine_subtopic()`:
+
+```python
+def refine_subtopic(q: str, a: str, topic: str, subtopic: str) -> str:
+    text = f"{q} {a}".lower()
+
+    # Existing logic...
+
+    # Add networking-specific refinements
+    if topic == "Networking":
+        if "http" in text and any(x in text for x in ["ssl", "tls", "certificate"]):
+            return "HTTP/HTTPS"
+        if "tcp" in text and "handshake" in text:
+            return "TCP/IP"
+
+    return subtopic
+```
+
+### Optional: Update Difficulty Heuristics
+
+Add topic-specific advanced/beginner terms in `difficulty_heuristic()`:
+
+```python
+def difficulty_heuristic(q: str, a: str) -> str:
+    text = f"{q} {a}".lower()
+
+    advanced = [
+        "mvcc", "2pl", "serializable", "cap theorem", "wal",
+        "b+ tree", "page replacement", "banker's algorithm",
+        "vtable", "raii",
+        "bgp", "ospf", "anycast", "multicast", "vlan"  # Networking advanced
+    ]
+
+    beginner = [
+        "what is", "define", "basic", "class", "object",
+        "process", "thread", "primary key",
+        "ip address", "router", "switch"  # Networking beginner
+    ]
+
+    # Rest of function...
+```
+
+## Step 5: Run Preparation and Indexing
+
+After making all changes, rebuild the knowledge base.
+
+### 1. Prepare Data
+
+```bash
+cd source/scripts
+python prepare_kb.py
+```
+
+Verify output includes your new topic:
+
+```
+🔄 Preparing KB with strict topic control...
+✅ KB preparation complete
+Clean JSON : data/processed/kb_clean.json
+Chunks     : data/processed/kb_chunks.jsonl
+```
+
+### 2. Build FAISS Index
+
+```bash
+python mistral_faiss.py
+```
+
+This generates embeddings for all questions including your new topic:
+
+```
+🔄 Generating embeddings...
+✅ FAISS index saved → data/processed/faiss_mistral/index.faiss
+✅ Metadata saved → data/processed/faiss_mistral/metas.json
+📦 Total vectors: 450
+```
+
+## Step 6: Test Topic Classification
+
+### Validate Output
+
+Check `source/data/processed/kb_clean.json` to ensure questions are correctly classified:
+
+```bash
+cd source/data/processed
+cat kb_clean.json | grep '"topic": "Networking"' | head -5
+```
+
+Expected output:
+
+```json
+{"id": "1", "question": "What is the OSI model?", "answer": "...", "topic": "Networking", "subtopic": "OSI Model", "difficulty": "Beginner"}
+{"id": "2", "question": "What is TCP?", "answer": "...", "topic": "Networking", "subtopic": "TCP/IP", "difficulty": "Intermediate"}
+```
+
+### Test Queries
+
+Query the system with topic-specific questions:
+
+```bash
+python rag_query.py
+```
+
+Try questions like:
+- "What is the OSI model?"
+- "Explain TCP vs UDP"
+- "How does DNS resolution work?"
+
+Verify that:
+1. Questions retrieve relevant context from your new topic
+2. Subtopics are correctly identified
+3. Difficulty levels make sense
+
+### Check Subtopic Distribution
+
+Verify questions are well-distributed across subtopics:
+
+```bash
+cd source/data/processed
+python3 -c "
+import json
+with open('kb_clean.json') as f:
+    data = json.load(f)
+    networking = [q for q in data if q['topic'] == 'Networking']
+    from collections import Counter
+    counts = Counter(q['subtopic'] for q in networking)
+    for subtopic, count in sorted(counts.items()):
+        print(f'{subtopic}: {count}')
+"
+```
+
+Expected output:
+
+```
+CDN: 5
+DNS: 8
+HTTP/HTTPS: 12
+Load Balancing: 6
+Network Protocols: 10
+Network Security: 9
+OSI Model: 15
+Routing: 7
+Socket Programming: 8
+TCP/IP: 14
+```
+
+## Example: Adding Data Structures
+
+Let's walk through a complete example of adding Data Structures as a new topic.
+
+### 1. Update taxonomy.json
+
+```json
+{
+  "name": "DataStructures",
+  "subtopics": [
+    "Arrays",
+    "Linked Lists",
+    "Stacks",
+    "Queues",
+    "Trees",
+    "Graphs",
+    "Hash Tables",
+    "Heaps"
+  ]
+}
+```
+
+### 2. Add rules to topic_rules.json
+
+```json
+[
+  {
+    "keywords": ["array", "static array", "dynamic array", "resize"],
+    "topic": "DataStructures",
+    "subtopic": "Arrays"
+  },
+  {
+    "keywords": ["linked list", "node", "singly linked", "doubly linked"],
+    "topic": "DataStructures",
+    "subtopic": "Linked Lists"
+  },
+  {
+    "keywords": ["stack", "push", "pop", "lifo"],
+    "topic": "DataStructures",
+    "subtopic": "Stacks"
+  },
+  {
+    "keywords": ["queue", "enqueue", "dequeue", "fifo"],
+    "topic": "DataStructures",
+    "subtopic": "Queues"
+  },
+  {
+    "keywords": ["tree", "binary tree", "bst", "avl", "red black"],
+    "topic": "DataStructures",
+    "subtopic": "Trees"
+  },
+  {
+    "keywords": ["graph", "vertex", "edge", "adjacency", "bfs", "dfs"],
+    "topic": "DataStructures",
+    "subtopic": "Graphs"
+  },
+  {
+    "keywords": ["hash table", "hash map", "hash function", "collision"],
+    "topic": "DataStructures",
+    "subtopic": "Hash Tables"
+  },
+  {
+    "keywords": ["heap", "priority queue", "min heap", "max heap"],
+    "topic": "DataStructures",
+    "subtopic": "Heaps"
+  }
+]
+```
+
+### 3. Create datastructures_qna.json
+
+```json
+[
+  {
+    "id": 1,
+    "question": "What is an array?",
+    "answer": "An array is a collection of elements stored at contiguous memory locations..."
+  },
+  {
+    "id": 2,
+    "question": "What is a linked list?",
+    "answer": "A linked list is a linear data structure where elements are not stored at contiguous locations..."
+  }
+]
+```
+
+### 4. Update prepare_kb.py
+
+```python
+def topic_from_filename(fname: str) -> str:
+    fname = fname.lower()
+    if "database" in fname or "dbms" in fname:
+        return "DBMS"
+    if "oops" in fname:
+        return "OOPs"
+    if "os" in fname:
+        return "OS"
+    if "datastructures" in fname or "ds" in fname:
+        return "DataStructures"
+    return "uncategorized"
+
+# In assign_subtopic fallback:
+fallback = {
+    "DBMS": "DBMS Architecture",
+    "OOPs": "Classes",
+    "OS": "Processes",
+    "DataStructures": "Arrays"
+}
+```
+
+### 5. Run and test
+
+```bash
+python prepare_kb.py
+python mistral_faiss.py
+python rag_query.py
+```
+
+## Troubleshooting
+
+### Issue: All questions assigned to fallback subtopic
+
+**Cause**: Keywords don't match question content
+
+**Solution**: 
+- Review your keyword rules - are they too specific?
+- Check actual question text for common terms
+- Lower the coverage threshold (default 0.25) if needed
+
+### Issue: Questions assigned to wrong topic
+
+**Cause**: Filename not recognized by `topic_from_filename()`
+
+**Solution**:
+- Ensure filename contains a recognizable keyword
+- Add filename pattern to the detection logic
+- Verify the `_source_file` field is set correctly
+
+### Issue: Poor subtopic distribution
+
+**Cause**: Some subtopics have better keywords than others
+
+**Solution**:
+- Balance keyword rules across all subtopics
+- Add more keywords to underrepresented subtopics
+- Review questions manually to identify missing keywords
+
+### Issue: Overlapping subtopics
+
+**Cause**: Questions could belong to multiple subtopics
+
+**Solution**:
+- Add refinement logic in `refine_subtopic()`
+- Use more specific keywords
+- Restructure subtopics to be more distinct
+
+## Best Practices
+
+1. **Start small**: Add 20-50 questions initially, then expand
+2. **Test incrementally**: Run preparation after each major change
+3. **Review classifications**: Manually inspect output for accuracy
+4. **Iterate on keywords**: Refine rules based on misclassifications
+5. **Document domain knowledge**: Add comments explaining non-obvious rules
+6. **Maintain consistency**: Follow existing naming conventions
+7. **Version control**: Commit changes before major updates
+
+## Related Documentation
+
+- **[KB Preparation](/development/kb-preparation)** - Understanding the preparation pipeline
+- **[FAISS Indexing](/development/faiss-indexing)** - Building search indexes

@@ -1,0 +1,382 @@
+---
+title: 'Environment Variables'
+description: 'Complete reference for configuring application environment variables'
+---
+
+## Overview
+
+The CS Interview Assistant uses environment variables for configuration, API keys, and sensitive credentials. All environment variables should be defined in a `.env` file in the backend root directory.
+
+## Quick Start
+
+Create a `.env` file in the `backend/` directory:
+
+```bash
+cd backend
+touch .env
+```
+
+Add your configuration (see sections below for all variables).
+
+<Warning>
+  **Never commit `.env` files to version control.** The `.env` file should be listed in `.gitignore`.
+</Warning>
+
+## Required Variables
+
+These variables **must** be set for the application to function properly.
+
+### Mistral AI Configuration
+
+<ParamField path="MISTRAL_API_KEY" type="string" required>
+  Your Mistral AI API key for accessing language models.
+  
+  **How to obtain:**
+  1. Sign up at [Mistral AI Console](https://console.mistral.ai/)
+  2. Navigate to API Keys section
+  3. Create a new API key
+  4. Copy the key to your `.env` file
+  
+  **Example:**
+  ```env
+  MISTRAL_API_KEY=your_mistral_api_key_here
+  ```
+  
+  **Used in:** `backend/app.py:612-617`, RAG system, adaptive interview controller
+</ParamField>
+
+<Note>
+  The application will fail to start if `MISTRAL_API_KEY` is not set, as it's required for core AI features including RAG, mock interviews, and coding exercises.
+</Note>
+
+## Security Variables
+
+These variables control authentication and session management. While defaults are provided, **you must change them in production**.
+
+### Flask Session Management
+
+<ParamField path="SECRET_KEY" type="string" required>
+  Flask secret key for session encryption and security.
+  
+  **Default:** `'your-secret-key-here'` (development only)
+  
+  **Production requirement:** Generate a secure random key
+  
+  **Example:**
+  ```env
+  SECRET_KEY=09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7
+  ```
+  
+  **Generate secure key:**
+  ```bash
+  python -c "import secrets; print(secrets.token_hex(32))"
+  ```
+  
+  **Defined in:** `backend/config.py:16`, `backend/app.py:137`
+</ParamField>
+
+<Warning>
+  Using the default `SECRET_KEY` in production is a **critical security vulnerability**. Always generate a unique, random key.
+</Warning>
+
+### JWT Authentication
+
+<ParamField path="JWT_SECRET_KEY" type="string" required>
+  Secret key for signing JSON Web Tokens (JWT) used for API authentication.
+  
+  **Default:** `'your-jwt-secret-key-here'` (development only)
+  
+  **Production requirement:** Generate a different key from `SECRET_KEY`
+  
+  **Example:**
+  ```env
+  JWT_SECRET_KEY=a8f5f167f44f4964e6c998dee827110c
+  ```
+  
+  **Generate secure key:**
+  ```bash
+  python -c "import secrets; print(secrets.token_hex(32))"
+  ```
+  
+  **Defined in:** `backend/config.py:25`, `backend/app.py:154`
+  
+  **Token expiration:** 24 hours (configured in `config.py:26`)
+</ParamField>
+
+## AI Model Configuration
+
+### Mistral Model Selection
+
+<ParamField path="MISTRAL_MODEL" type="string" default="mistral-large-latest">
+  Specifies which Mistral model to use for AI operations.
+  
+  **Available models:**
+  - `mistral-large-latest` - Most capable, recommended for production
+  - `mistral-medium-latest` - Balanced performance and cost
+  - `mistral-small-latest` - Faster, lower cost
+  - `open-mistral-7b` - Open source model
+  
+  **Example:**
+  ```env
+  MISTRAL_MODEL=mistral-large-latest
+  ```
+  
+  **Defined in:** `backend/config.py:29`, `backend/app.py:610`
+  
+  **Impact:** Affects quality of interview questions, code analysis, and RAG responses
+</ParamField>
+
+<Info>
+  The default `mistral-large-latest` model provides the best results for technical interviews. Consider smaller models only if cost optimization is critical.
+</Info>
+
+## Optional Variables
+
+These variables enable additional features but are not required for basic operation.
+
+### Speech-to-Text Services
+
+<ParamField path="ASSEMBLYAI_API_KEY" type="string" optional>
+  AssemblyAI API key for real-time speech transcription during voice interviews.
+  
+  **When to use:** Enable this for production-quality real-time transcription
+  
+  **Fallback:** If not set, the system uses a mock transcription service (no actual transcription)
+  
+  **How to obtain:**
+  1. Sign up at [AssemblyAI](https://www.assemblyai.com/)
+  2. Get your API key from the dashboard
+  
+  **Example:**
+  ```env
+  ASSEMBLYAI_API_KEY=your_assemblyai_key_here
+  ```
+  
+  **Used in:** `backend/assemblyai_websocket_stream.py`
+</ParamField>
+
+<Note>
+  Without `ASSEMBLYAI_API_KEY`, voice interview features will use a mock transcription service that collects audio but doesn't transcribe it. This is useful for development but not for production.
+</Note>
+
+## Database Configuration
+
+### Default SQLite Configuration
+
+By default, the application uses SQLite with no additional configuration needed:
+
+```python
+# Automatically configured in config.py:17
+SQLALCHEMY_DATABASE_URI = 'sqlite:///interview_prep.db'
+```
+
+**Database location:** `instance/interview_prep.db` (created automatically)
+
+### PostgreSQL Configuration (Production)
+
+For production deployments, use PostgreSQL by setting:
+
+<ParamField path="DATABASE_URL" type="string" optional>
+  PostgreSQL connection string (production environments only).
+  
+  **Format:**
+  ```env
+  DATABASE_URL=postgresql://username:password@host:port/database
+  ```
+  
+  **Example:**
+  ```env
+  DATABASE_URL=postgresql://interview_user:secure_password@localhost:5432/interview_db
+  ```
+  
+  **To enable:** Modify `backend/config.py:17` to use this variable:
+  ```python
+  SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///interview_prep.db')
+  ```
+</ParamField>
+
+## File Upload Configuration
+
+These settings are configured in `config.py` but can be overridden via environment variables if needed.
+
+<ParamField path="UPLOAD_FOLDER" type="string" default="uploads">
+  Directory for storing uploaded files (resumes, audio recordings).
+  
+  **Defined in:** `backend/config.py:21`
+</ParamField>
+
+<ParamField path="MAX_CONTENT_LENGTH" type="integer" default="16777216">
+  Maximum file upload size in bytes (default: 16MB).
+  
+  **Defined in:** `backend/config.py:22`
+</ParamField>
+
+## RAG System Paths
+
+These paths are configured in `config.py` and typically don't need environment variable overrides:
+
+```python
+# FAISS index locations (config.py:33-36)
+RAG_DIRS = [
+    PROJECT_ROOT / "data" / "processed" / "faiss_mistral",
+    Path("data") / "processed" / "faiss_mistral"
+]
+
+# Configuration files (config.py:39-41)
+CONFIG_DIR = PROJECT_ROOT / "config"
+TOPIC_RULES_FILE = CONFIG_DIR / "topic_rules.json"
+TAXONOMY_FILE = CONFIG_DIR / "taxonomy.json"
+```
+
+## Complete .env Template
+
+Here's a complete `.env` file template with all available variables:
+
+```env
+# ==========================================
+# REQUIRED: AI Configuration
+# ==========================================
+MISTRAL_API_KEY=your_mistral_api_key_here
+
+# ==========================================
+# REQUIRED: Security (Change in Production!)
+# ==========================================
+SECRET_KEY=your-secret-key-here
+JWT_SECRET_KEY=your-jwt-secret-key-here
+
+# ==========================================
+# OPTIONAL: AI Model Selection
+# ==========================================
+MISTRAL_MODEL=mistral-large-latest
+
+# ==========================================
+# OPTIONAL: Speech-to-Text
+# ==========================================
+# ASSEMBLYAI_API_KEY=your_assemblyai_key_here
+
+# ==========================================
+# OPTIONAL: Production Database
+# ==========================================
+# DATABASE_URL=postgresql://user:password@localhost:5432/interview_db
+
+# ==========================================
+# OPTIONAL: File Upload Configuration
+# ==========================================
+# UPLOAD_FOLDER=uploads
+# MAX_CONTENT_LENGTH=16777216
+```
+
+## Security Best Practices
+
+### 1. Never Commit Secrets
+
+```bash
+# Add to .gitignore
+.env
+.env.local
+.env.*.local
+*.env
+```
+
+### 2. Use Different Keys for Each Environment
+
+Maintain separate `.env` files for development, staging, and production:
+
+- `.env.development`
+- `.env.staging`
+- `.env.production`
+
+### 3. Rotate Keys Regularly
+
+In production:
+- Rotate `SECRET_KEY` and `JWT_SECRET_KEY` every 90 days
+- Rotate `MISTRAL_API_KEY` if compromised
+- Update all active sessions after key rotation
+
+### 4. Use Environment Variable Management
+
+For production deployments, consider using:
+
+- **Docker Secrets** for containerized deployments
+- **AWS Secrets Manager** or **Azure Key Vault** for cloud deployments
+- **HashiCorp Vault** for enterprise environments
+
+### 5. Restrict File Permissions
+
+```bash
+chmod 600 .env  # Only owner can read/write
+```
+
+## Loading Environment Variables
+
+The application automatically loads environment variables using `python-dotenv`:
+
+```python
+# backend/config.py:11
+from dotenv import load_dotenv
+load_dotenv()
+```
+
+Variables are loaded in this order (later sources override earlier ones):
+1. System environment variables
+2. `.env` file in backend directory
+3. Default values in code
+
+## Verification
+
+Verify your environment configuration:
+
+```bash
+# Check if .env file exists
+ls -la backend/.env
+
+# Test environment loading (without exposing secrets)
+python -c "from dotenv import load_dotenv; import os; load_dotenv(); print('MISTRAL_API_KEY:', 'SET' if os.getenv('MISTRAL_API_KEY') else 'NOT SET')"
+```
+
+## Troubleshooting
+
+### Environment Variables Not Loading
+
+**Problem:** Application uses default values instead of `.env` values
+
+**Solutions:**
+1. Ensure `.env` file is in the correct directory (`backend/.env`)
+2. Check file permissions: `chmod 644 .env`
+3. Verify no syntax errors in `.env` (no spaces around `=`)
+4. Restart the application after modifying `.env`
+
+### API Key Invalid
+
+**Problem:** `MISTRAL_API_KEY` authentication fails
+
+**Solutions:**
+1. Verify the key is copied correctly (no extra spaces)
+2. Check if the key is active in Mistral AI Console
+3. Ensure no quotes around the value in `.env`
+4. Test the key directly:
+   ```bash
+   curl https://api.mistral.ai/v1/models \
+     -H "Authorization: Bearer $MISTRAL_API_KEY"
+   ```
+
+### Database Connection Issues
+
+**Problem:** PostgreSQL connection fails
+
+**Solutions:**
+1. Verify `DATABASE_URL` format is correct
+2. Check if PostgreSQL is running: `pg_isready`
+3. Verify credentials and database exists
+4. Ensure config.py is modified to use `DATABASE_URL`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Requirements" icon="list" href="/deployment/requirements">
+    Review system and dependency requirements
+  </Card>
+  <Card title="Production Setup" icon="rocket" href="/deployment/production-setup">
+    Configure production deployment
+  </Card>
+</CardGroup>

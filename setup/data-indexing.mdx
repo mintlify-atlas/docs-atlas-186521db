@@ -1,0 +1,271 @@
+---
+title: Data Indexing
+description: Build and manage the FAISS knowledge base index for technical interview questions
+---
+
+## Overview
+
+The CS Interview Assistant uses a vector-based knowledge base powered by **FAISS** (Facebook AI Similarity Search) to retrieve relevant technical interview questions. The knowledge base covers three main computer science topics:
+
+- **DBMS** - Database Management Systems
+- **OOPs** - Object-Oriented Programming
+- **OS** - Operating Systems
+
+<Info>
+  If you're running the project for the first time or the technical interview section is empty, you need to build the knowledge base index.
+</Info>
+
+---
+
+## Knowledge Base System
+
+The indexing system consists of two main scripts:
+
+1. **`prepare_kb.py`** - Processes raw JSON data and creates a clean, normalized dataset
+2. **`mistral_faiss.py`** (or `reindex_mistral.py`) - Builds the FAISS vector index from the processed data
+
+### Data Flow
+
+```
+data/raw/*.json → prepare_kb.py → data/processed/kb_clean.json → mistral_faiss.py → data/processed/faiss_mistral/
+```
+
+### What Gets Created
+
+After indexing, the following files are generated in `data/processed/faiss_mistral/`:
+
+- **`index.faiss`** - The FAISS vector index containing embeddings
+- **`metas.json`** - Metadata for each indexed question (topic, difficulty, source, etc.)
+
+---
+
+## Step 1: Prepare Raw Data
+
+<Steps>
+  <Step title="Add raw data files">
+    Place your raw JSON files containing interview questions in the `data/raw/` directory.
+    
+    Each JSON file should contain an array of question objects or a dictionary with a list value.
+  </Step>
+
+  <Step title="Run the preparation script">
+    From the root `be` directory with your virtual environment activated:
+    
+    ```bash
+    python scripts/prepare_kb.py
+    ```
+    
+    <Note>
+      If `kb_clean.json` already exists, you can skip this step unless you've added new data.
+    </Note>
+  </Step>
+
+  <Step title="Verify output">
+    Check that `data/processed/kb_clean.json` was created successfully.
+    
+    This file contains normalized and cleaned question data with:
+    - Standardized text formatting
+    - Topic categorization (DBMS, OOPs, OS)
+    - Subtopic classification
+    - Difficulty levels
+    - Unique IDs for each question
+  </Step>
+</Steps>
+
+### Data Processing Steps
+
+The `prepare_kb.py` script performs the following operations:
+
+1. **Load JSON files** from `data/raw/` directory
+2. **Topic detection** from filename (database → DBMS, oops → OOPs, os → OS)
+3. **Text normalization**:
+   - Strip HTML tags
+   - Normalize Unicode characters
+   - Remove extra whitespace
+   - Convert special characters
+4. **Generate stable IDs** using SHA-1 hashing
+5. **Apply topic rules** from `config/topic_rules.json`
+6. **Output clean JSON** to `data/processed/kb_clean.json`
+
+---
+
+## Step 2: Build FAISS Index
+
+<Steps>
+  <Step title="Run the indexing script">
+    From the root `be` directory with your virtual environment activated:
+    
+    ```bash
+    python scripts/reindex_mistral.py
+    ```
+    
+    Or if using the alternative script:
+    
+    ```bash
+    python scripts/mistral_faiss.py
+    ```
+    
+    <Warning>
+      This command requires `kb_clean.json` to exist. Run `prepare_kb.py` first if you haven't already.
+    </Warning>
+  </Step>
+
+  <Step title="Monitor the indexing process">
+    The script will display progress as it:
+    
+    1. Loads data from `kb_clean.json`
+    2. Creates text chunks (Q&A pairs)
+    3. Generates embeddings using `all-MiniLM-L6-v2` model
+    4. Builds the FAISS index
+    5. Saves the index and metadata
+    
+    **Example output:**
+    ```
+    🔄 Generating embeddings...
+    Batches: 100%|████████████████████| 50/50 [00:12<00:00,  4.12it/s]
+    ✅ FAISS index saved → data/processed/faiss_mistral/index.faiss
+    ✅ Metadata saved → data/processed/faiss_mistral/metas.json
+    📦 Total vectors: 1500
+    ```
+  </Step>
+
+  <Step title="Verify the index">
+    Check that the `data/processed/faiss_mistral/` directory contains:
+    
+    - `index.faiss` - The vector index file
+    - `metas.json` - The metadata file
+    
+    The index is now ready to be used by the RAG system!
+  </Step>
+</Steps>
+
+### Embedding Model
+
+The indexing script uses **Sentence Transformers** with the `all-MiniLM-L6-v2` model:
+
+```python
+model = SentenceTransformer("all-MiniLM-L6-v2")
+embeddings = model.encode(
+    chunks,
+    show_progress_bar=True,
+    normalize_embeddings=True  # Important for cosine similarity
+)
+```
+
+### FAISS Index Type
+
+The system uses `IndexFlatIP` (Inner Product) for exact similarity search:
+
+```python
+dimension = embeddings.shape[1]  # 384 for all-MiniLM-L6-v2
+index = faiss.IndexFlatIP(dimension)
+index.add(np.asarray(embeddings, dtype="float32"))
+```
+
+---
+
+## Refreshing Data
+
+To add new questions or refresh the existing knowledge base:
+
+<Steps>
+  <Step title="Add new data">
+    Add or update JSON files in the `data/raw/` directory.
+  </Step>
+
+  <Step title="Reprocess data">
+    ```bash
+    python scripts/prepare_kb.py
+    ```
+  </Step>
+
+  <Step title="Rebuild index">
+    ```bash
+    python scripts/reindex_mistral.py
+    ```
+  </Step>
+
+  <Step title="Restart backend">
+    Restart the backend server to load the new index:
+    
+    ```bash
+    python backend/app.py
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Metadata Structure
+
+Each entry in `metas.json` contains:
+
+```json
+{
+  "id": "a3f2c1b4e5d6",
+  "topic": "DBMS",
+  "subtopic": "Normalization",
+  "difficulty": "medium",
+  "source": "database_questions.json"
+}
+```
+
+<ParamField path="id" type="string">
+  Unique identifier for the question (12-character SHA-1 hash)
+</ParamField>
+
+<ParamField path="topic" type="string">
+  Main topic category: `DBMS`, `OOPs`, or `OS`
+</ParamField>
+
+<ParamField path="subtopic" type="string">
+  Specific subtopic within the main category
+</ParamField>
+
+<ParamField path="difficulty" type="string">
+  Question difficulty level: `easy`, `medium`, or `hard`
+</ParamField>
+
+<ParamField path="source" type="string">
+  Original source filename from `data/raw/`
+</ParamField>
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="kb_clean.json not found">
+    **Error:** `❌ kb_clean.json not found. Run prepare_kb.py first.`
+    
+    **Solution:** Run the data preparation script:
+    ```bash
+    python scripts/prepare_kb.py
+    ```
+  </Accordion>
+
+  <Accordion title="kb_clean.json is empty">
+    **Error:** `❌ kb_clean.json is empty.`
+    
+    **Solution:** Check that you have JSON files in `data/raw/` and re-run:
+    ```bash
+    python scripts/prepare_kb.py
+    ```
+  </Accordion>
+
+  <Accordion title="No raw data files">
+    **Issue:** No JSON files in `data/raw/` directory.
+    
+    **Solution:** Add your interview question JSON files to the `data/raw/` directory before running `prepare_kb.py`.
+  </Accordion>
+
+  <Accordion title="Embedding model download issues">
+    **Issue:** First-time run requires downloading the Sentence Transformers model.
+    
+    **Solution:** Ensure you have internet connectivity. The model will be cached locally after the first download.
+  </Accordion>
+</AccordionGroup>
+
+<Check>
+  Data indexing complete! Your knowledge base is ready. Start the application to begin using the CS Interview Assistant.
+</Check>

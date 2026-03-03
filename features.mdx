@@ -1,0 +1,393 @@
+---
+title: 'Features'
+description: 'Comprehensive overview of the AI-powered interview preparation platform capabilities'
+---
+
+# Platform Features
+
+Explore the complete suite of AI-powered tools designed to help you master technical interviews. Each feature uses advanced machine learning and signal processing to provide personalized, actionable feedback.
+
+## Core Capabilities
+
+<CardGroup cols={2}>
+  <Card
+    title="Resume Analysis & RAG"
+    icon="file-user"
+    href="/features/resume-analysis"
+  >
+    Upload your resume and get personalized questions based on your actual experience using FAISS vector search and semantic matching
+  </Card>
+  
+  <Card
+    title="Mock Interviews"
+    icon="microphone"
+    href="/features/mock-interviews"
+  >
+    Live audio interviews with real-time transcription, voice quality analysis, and instant feedback on both content and delivery
+  </Card>
+  
+  <Card
+    title="Technical Q&A Sessions"
+    icon="code"
+    href="/features/technical-qa"
+  >
+    Practice with 300+ curated questions across DBMS, OOP, and Operating Systems with difficulty-based progression
+  </Card>
+  
+  <Card
+    title="Coding Practice"
+    icon="terminal"
+    href="/features/coding-practice"
+  >
+    Solve coding problems with AI-powered debugging assistance and performance optimization feedback
+  </Card>
+  
+  <Card
+    title="Adaptive Learning"
+    icon="chart-line"
+    href="/features/adaptive-learning"
+  >
+    Topic mastery tracking with concept-level analytics and automatic difficulty adjustment based on your performance
+  </Card>
+  
+  <Card
+    title="Action Plans"
+    icon="list-check"
+    href="/features/adaptive-learning"
+  >
+    AI-generated study plans that identify weak concepts and recommend targeted practice sessions
+  </Card>
+</CardGroup>
+
+## Resume Analysis & Retrieval-Augmented Generation
+
+### How It Works
+
+The platform uses a sophisticated RAG pipeline to personalize your interview experience:
+
+1. **Document Parsing**: Extracts text from PDF/DOCX files using PyPDF2 and python-docx
+2. **Semantic Vectorization**: Converts your skills, projects, and experience into 384-dimensional vectors using Sentence Transformers (all-MiniLM-L6-v2)
+3. **FAISS Indexing**: Creates a searchable vector database specific to your background
+4. **Contextual Question Generation**: When you practice, the system retrieves relevant sections of your resume and generates questions interviewers might actually ask
+
+### Key Features
+
+- **Project-Based Questions**: "Tell me about your experience with [specific project from your resume]"
+- **Skill Verification**: Questions that test your claimed expertise (e.g., if you list React, expect hooks/state management questions)
+- **Gap Analysis**: Identifies missing skills for target roles by comparing your resume to job descriptions
+- **Semantic Job Matching**: Calculates similarity scores between your resume and job postings
+
+<Note>
+Resumes are indexed per user in `resume_faiss/user_<id>/` directories. The system maintains separate indices for privacy and multi-user support.
+</Note>
+
+## Mock Interviews with Real-Time Audio Analysis
+
+### Live Interview Simulation
+
+Experience interviews that feel real with comprehensive analysis:
+
+#### Parallel Processing Architecture
+
+The platform uses a dual-stream approach during live interviews:
+
+**Stream A: Signal Processing (Immediate)**
+- Analyzes raw audio bytes in real-time
+- Calculates volume (RMS), pitch (YIN algorithm), and pause detection
+- Updates running statistics using Welford's algorithm for memory efficiency
+- No external API dependency
+
+**Stream B: Semantic Processing (Streaming)**
+- Forwards audio to AssemblyAI for real-time transcription
+- Provides live captioning so you see what the system "hears"
+- Falls back to local Faster-Whisper if API unavailable
+
+#### Metrics Tracked
+
+| Metric | What It Measures | Why It Matters |
+|--------|------------------|----------------|
+| **Speaking Rate (WPM)** | Words per minute during active speech | Too fast = nervous, too slow = unprepared |
+| **Pause Ratio** | Silence vs. speaking time | High ratio = hesitation, overthinking |
+| **Pitch Stability** | Voice frequency consistency (Coefficient of Variation) | Unstable pitch = lack of confidence |
+| **Pitch Range** | F0 variation across answer | Monotone = disengaged, wide range = enthusiastic |
+| **Confidence Score** | Voice steadiness (shimmer/jitter analysis) | Detects tremors that indicate nervousness |
+| **Filler Word Count** | "um", "uh", "like", "you know" | Professional communication metric |
+
+### Post-Interview Feedback
+
+After completing a mock interview, you receive:
+
+- **Transcript**: Full text of what you said
+- **Speech Analysis**: Visual graphs of your pitch, volume, and pacing over time
+- **Content Evaluation**: AI assessment of technical accuracy and completeness
+- **Comparison**: How your answer compares to ideal responses (semantic similarity)
+- **Actionable Recommendations**: Specific areas to improve
+
+<CodeGroup>
+```json Example Feedback
+{
+  "overall_score": 78,
+  "speech_metrics": {
+    "wpm": 145,
+    "pause_ratio": 0.23,
+    "pitch_stability": 0.92,
+    "confidence_score": 85
+  },
+  "content_analysis": {
+    "semantic_similarity": 0.81,
+    "keyword_coverage": 0.75,
+    "technical_accuracy": "good"
+  },
+  "feedback": "You demonstrated solid understanding of database normalization. Your delivery was confident (stable pitch), but you could improve by reducing filler words (counted 7 'um's). Consider elaborating more on 3NF vs BCNF."
+}
+```
+</CodeGroup>
+
+## Technical Q&A Knowledge Base
+
+### Question Database
+
+Practice with a curated collection of computer science interview questions:
+
+#### Topics Covered
+
+<AccordionGroup>
+  <Accordion title="Database Management Systems (185 questions, 15 subtopics)">
+    - SQL Fundamentals
+    - Normalization & Schema Design
+    - Transactions & ACID Properties
+    - Indexing & Query Optimization
+    - Concurrency Control
+    - Database Security
+    - NoSQL vs SQL
+    - Distributed Databases
+    - Backup & Recovery
+    - Data Warehousing
+    - And 5 more...
+  </Accordion>
+  
+  <Accordion title="Object-Oriented Programming (200 questions, 8 subtopics)">
+    - OOP Principles (Encapsulation, Inheritance, Polymorphism)
+    - Design Patterns
+    - SOLID Principles
+    - Abstract Classes vs Interfaces
+    - Composition vs Inheritance
+    - UML Diagrams
+    - Memory Management
+    - Exception Handling
+  </Accordion>
+  
+  <Accordion title="Operating Systems (100 questions, 10 subtopics)">
+    - Process Management & Scheduling
+    - Memory Management & Virtual Memory
+    - Deadlocks & Synchronization
+    - File Systems
+    - I/O Management
+    - System Calls
+    - Threading & Concurrency
+    - Security & Protection
+    - Storage Systems
+    - Networking
+  </Accordion>
+</AccordionGroup>
+
+### Automatic Difficulty Classification
+
+Every question is categorized as Beginner, Intermediate, or Advanced using keyword-based heuristics:
+
+- **Beginner**: Definitions, basic concepts ("What is a database?", "Define polymorphism")
+- **Intermediate**: Application, comparisons ("Explain 2PL vs Optimistic Concurrency")
+- **Advanced**: Architecture, trade-offs ("Design a distributed transaction system")
+
+### Topic Detection
+
+The system automatically detects question topics using keyword rules defined in `config/topic_rules.json`. When you ask a question naturally, it classifies it and enhances retrieval:
+
+```python
+# User asks: "What is process scheduling?"
+# System detects: topic="OS", subtopic="Process Management"
+# Enhanced query: "Question about Process Management in OS: What is process scheduling?"
+# Result: More accurate FAISS retrieval
+```
+
+## Adaptive Learning System
+
+### Mastery Tracking
+
+The platform maintains a comprehensive profile of your knowledge:
+
+#### User Mastery Model
+
+For each topic, the system tracks:
+
+- **Mastery Level** (0-1): Overall competence score
+- **Semantic Average**: How well your answers match ideal responses
+- **Keyword Average**: Coverage of required technical terms
+- **Questions Attempted**: Total practice count
+- **Correct Count**: Successful answers
+- **Response Time**: Average time to answer
+- **Mastery Velocity**: Rate of improvement over time
+
+#### Concept-Level Granularity
+
+Beyond topic-level tracking, the system identifies:
+
+- **Strong Concepts**: Consistently answered correctly (&gt;80% accuracy)
+- **Weak Concepts**: Needs improvement (&lt;60% accuracy)
+- **Missing Concepts**: Never encountered in your practice
+- **Stagnant Concepts**: No improvement over last 5 attempts
+
+<CodeGroup>
+```json Example Mastery Data
+{
+  "topic": "DBMS",
+  "mastery_level": 0.72,
+  "sessions_attempted": 15,
+  "questions_attempted": 87,
+  "correct_count": 63,
+  "mastery_velocity": 0.08,
+  "strong_concepts": ["SQL Basics", "Normalization"],
+  "weak_concepts": ["Query Optimization", "Indexing"],
+  "missing_concepts": ["Distributed Transactions"]
+}
+```
+</CodeGroup>
+
+### Difficulty Adaptation
+
+The platform automatically adjusts question difficulty:
+
+- **Consecutive Good Answers (3+)**: Difficulty increases
+- **Consecutive Poor Answers (2+)**: Difficulty decreases
+- **Mixed Performance**: Stays at current level
+
+This ensures you're always challenged but not overwhelmed.
+
+### Personalized Action Plans
+
+Based on your mastery data, the AI generates structured study plans:
+
+1. **Identifies Weak Concepts**: Finds your bottom 20% concepts
+2. **Prioritizes by Impact**: Focuses on high-frequency interview topics
+3. **Recommends Practice Sessions**: Specific subtopics to work on
+4. **Sets Measurable Goals**: Target mastery levels for each concept
+5. **Tracks Progress**: Updates as you complete sessions
+
+## Coding Practice & Debugging
+
+### AI-Powered Code Analysis
+
+Submit code snippets for:
+
+- **Bug Detection**: Identifies logical errors, syntax issues, and edge cases
+- **Performance Review**: Analyzes time/space complexity
+- **Best Practices**: Suggests Pythonic/idiomatic improvements
+- **Security Audit**: Flags potential vulnerabilities
+
+### Debugging Assistant
+
+When you're stuck on a coding problem:
+
+1. Submit your code and describe the issue
+2. AI analyzes execution flow and state
+3. Provides hints (not solutions) to guide you
+4. Explains **why** the bug occurs, not just where
+
+<Note>
+The coding engine uses Mistral AI's code-specific capabilities for accurate analysis. It's trained to recognize common interview patterns (two-pointers, sliding window, dynamic programming, etc.).
+</Note>
+
+## HR & Behavioral Interview Practice
+
+### Conversational Interview Mode
+
+Practice behavioral questions with multi-turn conversations:
+
+- "Tell me about a time you faced a conflict with a team member"
+- "Describe your biggest technical challenge"
+- "Why do you want to work at our company?"
+
+The AI asks follow-up questions based on your answers, simulating real HR interviews.
+
+### STAR Framework Evaluation
+
+Answers are evaluated using the STAR framework:
+
+- **Situation**: Did you set context?
+- **Task**: Was the challenge clear?
+- **Action**: Did you explain your specific actions?
+- **Result**: Did you quantify outcomes?
+
+## Session History & Analytics
+
+### Performance Dashboard
+
+Track your progress over time:
+
+- **Session Timeline**: View all past interviews
+- **Score Trends**: See improvement across topics
+- **Time Invested**: Total practice hours logged
+- **Topic Distribution**: Which areas you've focused on
+
+### Exportable Reports
+
+Download your practice history as JSON/CSV for external analysis or portfolio building.
+
+## Technology Highlights
+
+### Signal Processing ("The Physics Layer")
+
+Unlike chatbot-based prep tools, this platform implements hard science:
+
+- **YIN Algorithm** (Librosa): Pitch tracking with &lt;1% error
+- **Welford's Algorithm**: Online variance calculation for streaming audio
+- **Shimmer/Jitter Analysis**: Voice quality metrics from speech pathology research
+- **Voice Activity Detection**: Distinguishes speech from silence with high accuracy
+
+### Machine Learning Models
+
+<CardGroup cols={3}>
+  <Card title="Mistral AI" icon="brain">
+    Question generation, answer evaluation, feedback synthesis
+  </Card>
+  <Card title="Sentence Transformers" icon="vector-square">
+    Semantic similarity, resume matching, answer relevance
+  </Card>
+  <Card title="Faster-Whisper" icon="microphone">
+    Local speech-to-text (offline capable)
+  </Card>
+</CardGroup>
+
+### Data Privacy
+
+- **Local Processing**: Audio analysis happens on-server, not sent to third parties (except AssemblyAI for transcription)
+- **User Isolation**: Each user has separate FAISS indices
+- **Password Security**: Werkzeug password hashing (PBKDF2-SHA256)
+- **No Data Selling**: Your resume and practice data never leave your instance
+
+## Coming Soon
+
+Features in development:
+
+- **Video Interview Mode**: Analyze facial expressions and eye contact
+- **Multi-Language Support**: Practice in Spanish, French, German, etc.
+- **Company-Specific Prep**: Tailored questions for FAANG, startups, etc.
+- **Peer Comparison**: Anonymous benchmarking against other users
+- **Mobile App**: Practice on iOS/Android
+
+<CardGroup cols={2}>
+  <Card
+    title="Resume Analysis Deep Dive"
+    icon="magnifying-glass"
+    href="/features/resume-analysis"
+  >
+    Learn how RAG personalizes your interview experience
+  </Card>
+  <Card
+    title="Mock Interview Guide"
+    icon="microphone"
+    href="/features/mock-interviews"
+  >
+    Master live audio interviews with real-time feedback
+  </Card>
+</CardGroup>

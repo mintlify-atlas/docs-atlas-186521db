@@ -1,0 +1,377 @@
+---
+title: 'Knowledge Base Preparation'
+description: 'Process raw JSON files and prepare structured knowledge base data'
+---
+
+## Overview
+
+The `prepare_kb.py` script is the first step in building the knowledge base. It processes raw JSON files containing question-answer pairs, assigns topics and subtopics through keyword matching, determines difficulty levels, and outputs clean, structured data ready for indexing.
+
+## Script Location
+
+```
+source/scripts/prepare_kb.py
+```
+
+## What It Does
+
+The preparation script performs these key operations:
+
+1. **Loads raw data** from `data/raw/*.json` files
+2. **Normalizes text** by removing HTML, standardizing whitespace, and handling Unicode
+3. **Assigns topics** (DBMS, OOPs, OS) based on filename patterns
+4. **Assigns subtopics** using keyword matching rules from `config/topic_rules.json`
+5. **Determines difficulty** (Beginner/Intermediate/Advanced) through heuristic analysis
+6. **Deduplicates** questions based on normalized text
+7. **Outputs** clean JSON and JSONL files for indexing
+
+## Input Requirements
+
+### Raw Data Format
+
+Place JSON files in `source/data/raw/`. Each file should contain an array of objects:
+
+```json
+[
+  {
+    "id": 1,
+    "question": "What is a database?",
+    "answer": "A database is an organized collection of structured data..."
+  },
+  {
+    "id": 2,
+    "question": "What is normalization?",
+    "answer": "Normalization is the process of organizing data..."
+  }
+]
+```
+
+**Note**: The script also handles nested JSON where the array is a value within an object.
+
+### Current Raw Files
+
+- `database_qna.json` - DBMS questions
+- `oops_qna_simplified.json` - Object-oriented programming questions
+- `os_qna.json` - Operating systems questions
+
+## Topic Assignment Logic
+
+Topics are determined from the source filename:
+
+```python
+def topic_from_filename(fname: str) -> str:
+    fname = fname.lower()
+    if "database" in fname or "dbms" in fname:
+        return "DBMS"
+    if "oops" in fname:
+        return "OOPs"
+    if "os" in fname:
+        return "OS"
+    return "uncategorized"
+```
+
+**Example**: A file named `database_qna.json` will have all its questions assigned to the "DBMS" topic.
+
+See `source/scripts/prepare_kb.py:67-75`
+
+## Subtopic Assignment
+
+Subtopics are assigned through keyword matching with configurable rules from `config/topic_rules.json`.
+
+### How It Works
+
+```python
+def assign_subtopic(q: str, a: str, topic: str, rules: List[Dict[str, Any]]) -> str:
+    text = f"{q} {a}".lower()
+    tokens = tokenize(text)
+
+    best_subtopic = None
+    best_score = 0.0
+
+    for rule in rules:
+        if rule["topic"] != topic:
+            continue
+
+        keywords = rule["keywords"]
+        matched = sum(1 for kw in keywords if kw in text or kw in tokens)
+        coverage = matched / len(keywords)
+
+        if coverage > best_score:
+            best_score = coverage
+            best_subtopic = rule["subtopic"]
+
+    # confidence threshold
+    if best_score >= 0.25:
+        return best_subtopic
+
+    # fallback to default subtopic
+    fallback = {
+        "DBMS": "DBMS Architecture",
+        "OOPs": "Classes",
+        "OS": "Processes"
+    }
+    return fallback.get(topic)
+```
+
+See `source/scripts/prepare_kb.py:104-134`
+
+### Keyword Matching Process
+
+1. Combines question and answer text
+2. Tokenizes into words (alphanumeric + some special chars)
+3. For each rule matching the topic, counts keyword matches
+4. Calculates coverage score (matches / total keywords)
+5. Selects subtopic with highest coverage
+6. Requires minimum 25% coverage threshold
+7. Falls back to default subtopic if threshold not met
+
+### Example
+
+For a question about "B+ tree indexing in databases":
+
+- Keywords matched: `["index", "indexing", "b+ tree", "b tree"]`
+- Rule matched: DBMS → Indexing
+- Coverage: 4/8 = 0.5 (50%)
+- Assigned subtopic: **Indexing**
+
+## Subtopic Refinement
+
+Special disambiguation logic handles overlapping concepts:
+
+```python
+def refine_subtopic(q: str, a: str, topic: str, subtopic: str) -> str:
+    text = f"{q} {a}".lower()
+
+    if "deadlock" in text:
+        if topic == "DBMS" and any(x in text for x in ["transaction", "lock"]):
+            return "Deadlocks"
+        if topic == "OS" and any(x in text for x in ["process", "resource"]):
+            return "Deadlocks"
+
+    if "memory" in text:
+        if topic == "OOPs":
+            return "Memory Management in OOP"
+        if topic == "OS":
+            return "Memory Management"
+
+    return subtopic
+```
+
+See `source/scripts/prepare_kb.py:137-152`
+
+This ensures "deadlock" questions go to the right topic-specific subtopic, and "memory" questions are properly categorized.
+
+## Difficulty Determination
+
+Difficulty levels are assigned using keyword heuristics:
+
+```python
+def difficulty_heuristic(q: str, a: str) -> str:
+    text = f"{q} {a}".lower()
+
+    advanced = [
+        "mvcc", "2pl", "serializable", "cap theorem", "wal",
+        "b+ tree", "page replacement", "banker's algorithm",
+        "vtable", "raii"
+    ]
+
+    beginner = [
+        "what is", "define", "basic", "class", "object",
+        "process", "thread", "primary key"
+    ]
+
+    if sum(1 for t in advanced if t in text) >= 2:
+        return "Advanced"
+    if sum(1 for t in beginner if t in text) >= 2:
+        return "Beginner"
+    return "Intermediate"
+```
+
+See `source/scripts/prepare_kb.py:155-173`
+
+### Difficulty Criteria
+
+- **Advanced**: Contains 2+ advanced technical terms (MVCC, CAP theorem, B+ tree, etc.)
+- **Beginner**: Contains 2+ beginner indicators ("what is", "define", "basic", etc.)
+- **Intermediate**: Default for everything else
+
+## Text Normalization
+
+All text goes through normalization to ensure consistency:
+
+```python
+def normalize_text(s: str) -> str:
+    s = unidecode(s)  # Convert Unicode to ASCII
+    s = strip_html(s)  # Remove HTML tags
+    s = s.replace("\xa0", " ")  # Replace non-breaking spaces
+    s = unicodedata.normalize("NFKC", s)  # Normalize Unicode
+    s = re.sub(r"[ \t]+", " ", s)  # Collapse whitespace
+    s = re.sub(r"\n\s*\n\s*", "\n\n", s)  # Normalize line breaks
+    return s.strip()
+```
+
+See `source/scripts/prepare_kb.py:26-33`
+
+### HTML Handling
+
+```python
+def strip_html(text: str) -> str:
+    text = re.sub(r"<\s*br\s*/?>", "\n", text, flags=re.I)  # <br> → newline
+    text = re.sub(r"<[^>]+>", " ", text)  # Remove all other tags
+    return text
+```
+
+See `source/scripts/prepare_kb.py:21-24`
+
+## Output Files
+
+The script generates two output files in `source/data/processed/`:
+
+### 1. kb_clean.json
+
+Structured JSON array with all metadata:
+
+```json
+[
+  {
+    "id": "1",
+    "question": "What is a database?",
+    "answer": "A database is an organized collection...",
+    "topic": "DBMS",
+    "subtopic": "DBMS Architecture",
+    "difficulty": "Beginner",
+    "source": "database_qna.json"
+  }
+]
+```
+
+### 2. kb_chunks.jsonl
+
+Newline-delimited JSON for embedding generation:
+
+```json
+{"id": "1", "text": "Q: What is a database?\nA: A database is...", "metadata": {"topic": "DBMS", "subtopic": "DBMS Architecture", "difficulty": "Beginner", "source": "database_qna.json"}}
+{"id": "2", "text": "Q: What is normalization?\nA: Normalization is...", "metadata": {"topic": "DBMS", "subtopic": "Normalization", "difficulty": "Intermediate", "source": "database_qna.json"}}
+```
+
+See `source/scripts/prepare_kb.py:217-241`
+
+## Running the Script
+
+### Prerequisites
+
+```bash
+pip install unidecode
+```
+
+### Execution
+
+```bash
+cd source/scripts
+python prepare_kb.py
+```
+
+### Expected Output
+
+```
+🔄 Preparing KB with strict topic control...
+✅ KB preparation complete
+Clean JSON : data/processed/kb_clean.json
+Chunks     : data/processed/kb_chunks.jsonl
+```
+
+## Deduplication
+
+The script prevents duplicate questions:
+
+```python
+seen = set()
+
+for obj in raw_items:
+    q = normalize_text(obj.get("question", ""))
+    a = normalize_text(obj.get("answer", ""))
+
+    if not q or not a:
+        continue
+
+    key = (q.lower(), a.lower())
+    if key in seen:
+        continue
+    seen.add(key)
+```
+
+See `source/scripts/prepare_kb.py:181-195`
+
+Duplicates are identified by normalized question+answer pairs (case-insensitive).
+
+## Code Walkthrough Example
+
+Let's trace how a single question is processed:
+
+### Input
+
+```json
+{
+  "id": 42,
+  "question": "What is <b>normalization</b> in DBMS?",
+  "answer": "Normalization is organizing data to reduce redundancy using normal forms like 1NF, 2NF, 3NF."
+}
+```
+
+### Processing Steps
+
+1. **Load**: Read from `database_qna.json`
+2. **Topic**: Filename contains "database" → `topic = "DBMS"`
+3. **Normalize question**: `"What is normalization in DBMS?"` (HTML removed)
+4. **Normalize answer**: `"Normalization is organizing data to reduce redundancy using normal forms like 1NF, 2NF, 3NF."`
+5. **Tokenize**: `{"what", "is", "normalization", "in", "dbms", "organizing", "data", "reduce", "redundancy", "normal", "forms", "1nf", "2nf", "3nf"}`
+6. **Match keywords**: Rule for "Normalization" has keywords: `["normalization", "normal form", "1nf", "2nf", "3nf", ...]`
+7. **Calculate coverage**: 5 matches / 10 keywords = 0.5 (50%)
+8. **Assign subtopic**: `subtopic = "Normalization"`
+9. **Check difficulty**: Contains "normal" + "1nf", "2nf", "3nf" but not enough advanced terms → `difficulty = "Intermediate"`
+10. **Generate ID**: Keep existing `"42"`
+
+### Output
+
+```json
+{
+  "id": "42",
+  "question": "What is normalization in DBMS?",
+  "answer": "Normalization is organizing data to reduce redundancy using normal forms like 1NF, 2NF, 3NF.",
+  "topic": "DBMS",
+  "subtopic": "Normalization",
+  "difficulty": "Intermediate",
+  "source": "database_qna.json"
+}
+```
+
+## Troubleshooting
+
+### Issue: Questions assigned to wrong subtopic
+
+**Solution**: Update keyword rules in `config/topic_rules.json` to include more specific keywords for that subtopic.
+
+### Issue: Too many "uncategorized" topics
+
+**Solution**: Ensure raw JSON filenames contain recognizable keywords ("database", "dbms", "oops", "os").
+
+### Issue: All questions marked as "Intermediate"
+
+**Solution**: Adjust the difficulty heuristics in the `difficulty_heuristic()` function or add more domain-specific keywords.
+
+### Issue: Duplicate questions in output
+
+**Solution**: This shouldn't happen due to deduplication. If it does, check if questions have different whitespace/formatting that bypasses normalization.
+
+## Next Steps
+
+After running `prepare_kb.py`, proceed to:
+
+1. **[FAISS Indexing](/development/faiss-indexing)** - Build vector search index
+2. **Query the system** - Use the RAG query interface
+
+## Related Configuration
+
+- **[Adding Topics](/development/adding-topics)** - Extend to new knowledge domains
+- `config/taxonomy.json` - Topic hierarchy structure
+- `config/topic_rules.json` - Keyword matching rules

@@ -1,0 +1,423 @@
+---
+title: Interview Sessions
+description: Start, conduct, and review different types of interview sessions
+---
+
+## Overview
+
+Interview sessions are the core of the platform's practice experience. Each session is tracked in the `InterviewSession` model, which records questions, answers, scores, feedback, and performance metrics.
+
+## Session Types
+
+The platform supports multiple session types identified by the `session_type` field:
+
+| Session Type | Description | Use Case |
+|--------------|-------------|----------|
+| `mock` | General mock interviews | Behavioral and situational questions |
+| `mock_resume` | Resume-based mock interviews | Questions derived from your specific experience |
+| `technical` | Technical knowledge interviews | Deep-dive into technical concepts |
+| `coding` | Data science coding challenges | Coding problems and algorithm questions |
+| `hr` | HR screening interviews | Culture fit and soft skills |
+| `agentic` | AI-powered adaptive interviews | Dynamic question generation based on performance |
+| `debugging` | Debugging challenges | Code debugging and problem-solving |
+
+## Interview Session Model
+
+Each session stores the following data:
+
+```python
+class InterviewSession(db.Model):
+    id                # Unique session identifier
+    user_id           # Foreign key to User
+    session_type      # Type of interview (see table above)
+    questions         # JSON array of questions asked
+    score             # Overall score (0-100)
+    feedback          # Detailed feedback text
+    duration          # Session duration in seconds
+    created_at        # Session start timestamp
+    completed_at      # Session completion timestamp
+    speech_metrics    # JSON with research-grade speech analysis
+```
+
+## Starting a Session
+
+<Steps>
+  <Step title="Choose session type">
+    Select the type of interview you want to practice:
+
+    **Mock Interview (Resume-based):**
+    ```bash
+    POST /api/mock_interview/questions
+    Authorization: Bearer <your-token>
+    {
+      "question_count": 5,
+      "difficulty": "medium"
+    }
+    ```
+
+    Requires uploaded resume. Generates questions based on your experience.
+
+    **Technical Interview:**
+    ```bash
+    POST /api/technical/questions
+    Authorization: Bearer <your-token>
+    {
+      "topic": "machine_learning",
+      "count": 8
+    }
+    ```
+
+    **Coding Interview:**
+    ```bash
+    POST /api/coding/questions
+    {
+      "count": 3,
+      "difficulty": "medium"
+    }
+    ```
+
+    Each endpoint returns a set of questions tailored to the session type.
+  </Step>
+
+  <Step title="Initialize session">
+    When you start a live interview (with voice), the system:
+
+    1. Creates a new InterviewSession record
+    2. Initializes speech tracking metrics
+    3. Starts AssemblyAI streaming (or mock streamer)
+    4. Begins recording session start time
+
+    **WebSocket Event:**
+    ```javascript
+    socket.emit('start_interview', {
+      user_id: <your-user-id>,
+      session_type: 'technical',
+      topic: 'python'
+    });
+    ```
+
+    **Response:**
+    ```json
+    {
+      "status": "started",
+      "message": "Interview started successfully",
+      "use_mock": false,
+      "session_id": 123
+    }
+    ```
+  </Step>
+
+  <Step title="Session initialization details">
+    The system creates session tracking objects:
+
+    - **Session Key**: `{user_id}_{session_type}`
+    - **Speech Metrics**: Tracks speaking time, pauses, fluency
+    - **Running Statistics**: Research-grade metrics for analysis
+    - **Silence Detection**: Monitors long pauses (>5 seconds)
+
+    Located in `app.py:1218-1301`
+  </Step>
+</Steps>
+
+## During the Session
+
+### Answering Questions
+
+The interview flow depends on the session type:
+
+<Tabs>
+  <Tab title="Live Voice Interview">
+    **Real-time Speech Processing:**
+
+    1. **Speak your answer**: Audio is streamed to AssemblyAI
+    2. **Transcription**: Your speech is converted to text in real-time
+    3. **Metrics tracking**: Speaking time, pauses, and fluency monitored
+    4. **Question completion**: System detects when you finish answering
+
+    **WebSocket Events:**
+    ```javascript
+    // Receive transcription
+    socket.on('transcription', (data) => {
+      console.log('Partial:', data.text);
+    });
+
+    // Final transcript
+    socket.on('final_transcription', (data) => {
+      console.log('Final:', data.text);
+    });
+    ```
+
+    The system tracks:
+    - Speech start/end times
+    - Silence periods
+    - Total words spoken
+    - Response latency
+  </Tab>
+
+  <Tab title="Text-based Interview">
+    **Submit written answers:**
+
+    ```bash
+    POST /api/mock_interview/evaluate_answer
+    Authorization: Bearer <your-token>
+    {
+      "question": "Tell me about a challenging project",
+      "answer": "In my previous role, I led a team...",
+      "expected_answer": "Expected to mention leadership, problem-solving..."
+    }
+    ```
+
+    The system evaluates:
+    - Semantic similarity to expected answer
+    - Keyword coverage
+    - Content quality
+    - Completeness
+  </Tab>
+
+  <Tab title="Coding Session">
+    **Submit code solutions:**
+
+    ```bash
+    POST /api/coding/evaluate
+    {
+      "question": "Write a function to find duplicates in an array",
+      "user_code": "def find_duplicates(arr): ...",
+      "language": "python"
+    }
+    ```
+
+    Evaluation includes:
+    - Code correctness
+    - Efficiency and optimization
+    - Best practices
+    - Edge case handling
+  </Tab>
+</Tabs>
+
+### Real-time Feedback
+
+During the session, you receive:
+
+**Immediate Evaluation:**
+- Semantic similarity score (0-1)
+- Keyword coverage percentage
+- Specific improvement suggestions
+- Concept mastery updates
+
+**Speech Metrics** (live interviews):
+- Speaking ratio (speaking time / total time)
+- Words per minute (WPM)
+- Long pause count
+- Fluency score
+- Average response latency
+
+Located in `app.py:1000-1179`
+
+### Running Statistics
+
+The `RunningStatistics` class tracks:
+
+```python
+class RunningStatistics:
+    session_start           # Session start timestamp
+    questions_answered      # Number of questions completed
+    total_words            # Total words spoken
+    speaking_time          # Cumulative speaking time
+    silence_time           # Cumulative silence time
+    long_pause_count       # Pauses longer than 5 seconds
+    forced_silence_time    # Time waiting for next question
+    response_latencies     # List of response start times
+    semantic_similarities  # List of similarity scores per answer
+```
+
+These metrics are computed at the end for the final analysis.
+
+## Completing the Session
+
+<Steps>
+  <Step title="Stop the interview">
+    End your session when you've completed all questions:
+
+    **WebSocket:**
+    ```javascript
+    socket.emit('stop_interview', {
+      user_id: <your-user-id>
+    });
+    ```
+
+    **HTTP Fallback:**
+    ```bash
+    POST /api/stop_interview
+    Authorization: Bearer <your-token>
+    {
+      "user_id": <your-user-id>
+    }
+    ```
+  </Step>
+
+  <Step title="Compute final metrics">
+    The system performs comprehensive analysis:
+
+    **Research-grade Metrics:**
+    - Session duration (total time)
+    - Effective duration (excluding forced silence)
+    - Speaking vs. silence ratio
+    - Words per minute (WPM)
+    - Average semantic similarity
+    - Fluency score (0-1)
+    - Long pause analysis
+
+    Function: `compute_research_metrics()` in `app.py:1053-1055`
+
+    **Example Output:**
+    ```json
+    {
+      "session_duration": 600.0,
+      "effective_duration": 580.0,
+      "speaking_time": 420.0,
+      "silence_time": 160.0,
+      "speaking_ratio": 0.724,
+      "total_words": 850,
+      "wpm": 121.4,
+      "long_pause_count": 3,
+      "avg_response_latency": 2.3,
+      "fluency_score": 0.867,
+      "questions_answered": 8,
+      "avg_semantic_similarity": 0.78
+    }
+    ```
+  </Step>
+
+  <Step title="Save to database">
+    The completed session is saved with:
+
+    ```python
+    session = InterviewSession(
+        user_id=user_id,
+        session_type='technical',
+        questions=json.dumps(questions_list),
+        score=avg_semantic_similarity * 100,
+        duration=int(session_duration),
+        completed_at=datetime.utcnow(),
+        speech_metrics=json.dumps(metrics)
+    )
+    ```
+
+    Located in `app.py:1158-1165`
+  </Step>
+
+  <Step title="Generate session summary">
+    For mock interviews, request an overall summary:
+
+    ```bash
+    POST /api/mock_interview/session_summary
+    Authorization: Bearer <your-token>
+    {
+      "answers": [
+        {
+          "question": "...",
+          "answer": "...",
+          "evaluation": {...}
+        }
+      ]
+    }
+    ```
+
+    Returns comprehensive feedback on:
+    - Overall performance
+    - Strongest areas
+    - Areas for improvement
+    - Specific recommendations
+    - Weakest concepts to practice
+
+    The summary is saved to the session's `feedback` field.
+  </Step>
+</Steps>
+
+## Reviewing Sessions
+
+### View Session History
+
+Retrieve your past interview sessions:
+
+```bash
+GET /api/sessions?type=technical
+Authorization: Bearer <your-token>
+```
+
+**Response:**
+```json
+{
+  "sessions": [
+    {
+      "id": 123,
+      "session_type": "technical",
+      "score": 78.5,
+      "duration": 600,
+      "created_at": "2026-03-03T14:30:00",
+      "completed_at": "2026-03-03T14:40:00",
+      "questions_count": 8
+    }
+  ]
+}
+```
+
+Filter by:
+- `type`: Session type (mock, technical, coding, etc.)
+- Automatically sorted by most recent first
+
+Located in `app.py:3170-3186`
+
+### Session Details
+
+Get full details of a specific session including:
+
+- Complete list of questions
+- Your answers and transcripts
+- Detailed feedback
+- All speech metrics
+- Concept mastery updates
+
+### Performance Analytics
+
+Session data feeds into:
+
+**UserMastery Updates:**
+- Mastery level per topic
+- Weak vs. strong concepts
+- Learning velocity
+- Difficulty progression
+
+See [Performance Tracking](/guide/performance-tracking) for detailed analytics.
+
+## Session Best Practices
+
+<Tip>
+  **For best results:**
+  - Upload your resume before starting resume-based sessions
+  - Ensure quiet environment for voice interviews
+  - Answer thoughtfully rather than rushing
+  - Review feedback immediately after completing
+  - Practice weak areas identified in session summaries
+</Tip>
+
+<Warning>
+  Sessions must have at least one answered question to generate valid metrics. The system validates with `metrics.get('questions_answered', 0) > 0` before analysis.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Track Your Progress" icon="chart-line" href="/guide/performance-tracking">
+    View mastery levels and learning analytics
+  </Card>
+  <Card title="Interview Endpoints" icon="code" href="/api/interview-endpoints">
+    Explore all interview endpoints
+  </Card>
+  <Card title="Resume Analysis" icon="file" href="/features/resume-analysis">
+    Generate personalized questions from your resume
+  </Card>
+  <Card title="Technical Q&A" icon="brain" href="/features/technical-qa">
+    Deep-dive into technical concept practice
+  </Card>
+</CardGroup>

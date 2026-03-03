@@ -1,0 +1,526 @@
+---
+title: 'Embeddings & FAISS Vector Search'
+description: 'Sentence transformers, FAISS index structure, and efficient semantic retrieval'
+---
+
+## Overview
+
+The system uses Sentence Transformers for text embeddings and FAISS (Facebook AI Similarity Search) for efficient vector similarity search. This enables semantic retrieval, concept matching, and duplicate detection.
+
+**Source Files**:
+- `backend/resume_processor.py`
+- `scripts/mistral_faiss.py`
+- `backend/rag.py`
+
+## Embedding Model
+
+### all-MiniLM-L6-v2
+
+A lightweight, fast sentence embedding model optimized for semantic similarity tasks.
+
+```python
+from sentence_transformers import SentenceTransformer
+
+embedder = SentenceTransformer("all-MiniLM-L6-v2")
+```
+
+**Model Characteristics**:
+- **Dimensions**: 384
+- **Max Sequence Length**: 256 tokens
+- **Performance**: 14,200 sentences/sec on V100 GPU
+- **Size**: 80 MB
+- **Training**: Trained on 1B+ sentence pairs
+
+**Location**: `interview_analyzer.py:23`, `resume_processor.py:38`, `rag.py:79`
+
+### Normalized Embeddings
+
+All embeddings are L2-normalized for efficient cosine similarity via inner product.
+
+```python
+# Generate normalized embeddings
+embeddings = embedder.encode(
+    texts,
+    normalize_embeddings=True  # L2 normalization
+)
+```
+
+**Why Normalize?**
+- Cosine similarity = inner product when vectors are normalized
+- Faster computation (no division needed)
+- FAISS `IndexFlatIP` optimized for inner product search
+
+## FAISS Index Structure
+
+### IndexFlatIP
+
+Inner Product index for normalized vectors (equivalent to cosine similarity).
+
+```python
+import faiss
+import numpy as np
+
+# Create index
+dimension = 384  # all-MiniLM-L6-v2 embedding size
+index = faiss.IndexFlatIP(dimension)
+
+# Add vectors
+embeddings_array = np.array(embeddings).astype('float32')
+index.add(embeddings_array)
+
+# Save index
+faiss.write_index(index, "index.faiss")
+```
+**Location**: `mistral_faiss.py:43-55`, `resume_processor.py:59-66`
+
+### Index Types Comparison
+
+| Index Type | Description | Use Case |
+|------------|-------------|----------|
+| `IndexFlatIP` | Exact inner product search | Normalized vectors, high accuracy |
+| `IndexFlatL2` | Exact L2 distance search | Non-normalized vectors |
+| `IndexIVFFlat` | Inverted file index | Large datasets, approximate search |
+| `IndexHNSWFlat` | Hierarchical NSW graph | Very large datasets, fast retrieval |
+
+**Current Implementation**: `IndexFlatIP` (exact search, no approximation)
+
+## Knowledge Base Index
+
+### Index Building Process
+
+Builds FAISS index from cleaned knowledge base.
+
+```python
+def build_faiss_index(chunks, metas):
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    
+    print("🔄 Generating embeddings...")
+    embeddings = model.encode(
+        chunks,
+        show_progress_bar=True,
+        normalize_embeddings=True
+    )
+    
+    dimension = embeddings.shape[1]  # 384
+    index = faiss.IndexFlatIP(dimension)
+    index.add(np.asarray(embeddings, dtype="float32"))
+    
+    # Save index and metadata
+    faiss.write_index(index, "data/processed/faiss_mistral/index.faiss")
+    with open("data/processed/faiss_mistral/metas.json", "w") as f:
+        json.dump(metas, f, indent=2)
+    
+    print(f"✅ Total vectors: {index.ntotal}")
+```
+**Location**: `mistral_faiss.py:43-66`
+
+### Chunk Creation
+
+Creates searchable chunks from Q&A pairs.
+
+```python
+def create_chunks_and_metas(data):
+    chunks = []
+    metas = []
+    
+    for item in data:
+        # Combine question and answer for richer context
+        text_chunk = f"Q: {item['question']}\nA: {item['answer']}"
+        chunks.append(text_chunk)
+        
+        metas.append({
+            "id": item["id"],
+            "topic": item["topic"],
+            "subtopic": item["subtopic"],
+            "difficulty": item["difficulty"],
+            "source": item.get("source"),
+        })
+    
+    return chunks, metas
+```
+**Location**: `mistral_faiss.py:24-40`
+
+### Metadata Storage (metas.json)
+
+Metadata stored separately for efficient retrieval.
+
+```json
+[
+  {
+    "id": "os_001",
+    "topic": "Operating Systems",
+    "subtopic": "Process Synchronization",
+    "difficulty": "medium",
+    "source": "kb_clean"
+  },
+  {
+    "id": "dbms_042",
+    "topic": "DBMS",
+    "subtopic": "Normalization",
+    "difficulty": "hard",
+    "source": "kb_clean"
+  }
+]
+```
+
+**Why Separate Metadata?**
+- FAISS only stores vectors, not metadata
+- Metadata indexed by position (0-based)
+- Fast lookup: `meta = metas[idx]`
+
+## Resume Index
+
+Per-user FAISS index for resume content.
+
+### Resume Processing
+
+```python
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+def process_resume_for_faiss(resume_text, user_id):
+    # Split text into chunks
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=500,
+        chunk_overlap=50,
+        separators=["\n\n", "\n", " ", ""]
+    )
+    chunks = text_splitter.split_text(resume_text)
+    
+    # Load embedding model
+    embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    
+    # Create embeddings
+    embeddings = []
+    metas = []
+    
+    for i, chunk in enumerate(chunks):
+        embedding = embedder.encode([chunk], normalize_embeddings=True)[0]
+        embeddings.append(embedding)
+        
+        meta = {
+            "id": f"resume_chunk_{user_id}_{i}",
+            "chunk_id": i,
+            "user_id": user_id,
+            "text": chunk,
+            "source": "resume",
+            "chunk_size": len(chunk)
+        }
+        metas.append(meta)
+    
+    # Build FAISS index
+    embeddings_array = np.array(embeddings).astype('float32')
+    dimension = embeddings_array.shape[1]
+    index = faiss.IndexFlatIP(dimension)
+    index.add(embeddings_array)
+    
+    # Save per-user index
+    index_path = f"data/processed/resume_faiss/resume_index_{user_id}.faiss"
+    metas_path = f"data/processed/resume_faiss/resume_metas_{user_id}.json"
+    
+    faiss.write_index(index, index_path)
+    save_json(metas, metas_path)
+    
+    return len(chunks)
+```
+**Location**: `resume_processor.py:29-75`
+
+### Chunking Strategy
+
+**RecursiveCharacterTextSplitter Parameters**:
+- `chunk_size=500`: Maximum chunk length (characters)
+- `chunk_overlap=50`: Overlap between chunks to preserve context
+- `separators=["\n\n", "\n", " ", ""]`: Split priority (paragraphs > lines > words > chars)
+
+**Benefits**:
+- Semantic coherence within chunks
+- Context preservation via overlap
+- Handles varied resume formats
+
+## Search Operations
+
+### Basic Search
+
+```python
+def search_faiss(query, index, metas, embedder, top_k=5):
+    # Encode query
+    query_embedding = embedder.encode([query], normalize_embeddings=True)[0]
+    query_embedding = np.array([query_embedding]).astype('float32')
+    
+    # Search
+    scores, indices = index.search(query_embedding, top_k)
+    
+    # Build results
+    results = []
+    for score, idx in zip(scores[0], indices[0]):
+        if idx < len(metas):
+            meta = metas[idx].copy()
+            meta["_score"] = float(score)
+            results.append(meta)
+    
+    return results
+```
+
+**Search Returns**:
+- `scores`: Similarity scores (higher = more similar)
+- `indices`: Positions in index (used to lookup metadata)
+
+### Resume Search
+
+```python
+def search_resume_faiss(query, user_id, top_k=5):
+    # Load user-specific index
+    index_path = f"data/processed/resume_faiss/resume_index_{user_id}.faiss"
+    metas_path = f"data/processed/resume_faiss/resume_metas_{user_id}.json"
+    
+    index = faiss.read_index(index_path)
+    metas = load_json(metas_path)
+    
+    # Encode and search
+    embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    query_embedding = embedder.encode([query], normalize_embeddings=True)[0]
+    query_embedding = np.array([query_embedding]).astype('float32')
+    
+    scores, indices = index.search(query_embedding, min(top_k, len(metas)))
+    
+    results = []
+    for score, idx in zip(scores[0], indices[0]):
+        if idx < len(metas):
+            meta = metas[idx].copy()
+            meta["_score"] = float(score)
+            results.append(meta)
+    
+    return results
+```
+**Location**: `resume_processor.py:77-109`
+
+### Topic-Filtered Search
+
+```python
+def search_with_topic_filter(query, index, metas, embedder, topic, k=5):
+    # Over-fetch to allow for filtering
+    search_k = k * 3
+    
+    query_embedding = embedder.encode([query], normalize_embeddings=True)
+    scores, indices = index.search(query_embedding, search_k)
+    
+    results = []
+    seen_ids = set()
+    
+    for idx, score in zip(indices[0], scores[0]):
+        if idx < 0 or idx >= len(metas):
+            continue
+        
+        meta = metas[idx]
+        
+        # Filter by topic
+        if meta.get("topic") != topic:
+            continue
+        
+        # Deduplicate
+        if meta["id"] in seen_ids:
+            continue
+        seen_ids.add(meta["id"])
+        
+        meta_copy = meta.copy()
+        meta_copy["_score"] = float(score)
+        results.append(meta_copy)
+        
+        if len(results) >= k:
+            break
+    
+    return results
+```
+**Location**: `rag.py:167-193`
+
+## Vector Dimensions
+
+### Embedding Space
+
+```python
+# all-MiniLM-L6-v2 produces 384-dimensional vectors
+text = "What is a deadlock in operating systems?"
+embedding = embedder.encode([text], normalize_embeddings=True)[0]
+
+print(f"Dimensions: {embedding.shape}")  # (384,)
+print(f"Norm: {np.linalg.norm(embedding)}")  # 1.0 (normalized)
+```
+
+### Distance Metrics
+
+**Inner Product (Normalized Vectors)**:
+```python
+# Equivalent to cosine similarity for normalized vectors
+similarity = np.dot(emb1, emb2)
+```
+
+**Cosine Similarity (General)**:
+```python
+from sklearn.metrics.pairwise import cosine_similarity
+
+similarity = cosine_similarity([emb1], [emb2])[0][0]
+```
+
+**L2 Distance**:
+```python
+distance = np.linalg.norm(emb1 - emb2)
+```
+
+### Similarity Thresholds
+
+| Use Case | Threshold | Interpretation |
+|----------|-----------|----------------|
+| Semantic Deduplication | 0.75 | Very similar questions |
+| Concept Matching | 0.65 | Concept present in answer |
+| Topic Detection | 0.50 | Weak topic signal |
+| Retrieval | 0.30 | Potentially relevant |
+
+## Job Description Embeddings
+
+Store JD embeddings for interview personalization.
+
+### Storage
+
+```python
+def store_jd_embedding(job_description, user_id):
+    # Initialize model
+    embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    
+    # Create embedding
+    embedding = embedder.encode([job_description], normalize_embeddings=True)[0]
+    
+    # Save to file
+    jd_path = f"data/processed/resume_faiss/jd_embedding_{user_id}.npy"
+    np.save(jd_path, embedding)
+    
+    # Save raw text for reference
+    jd_text_path = f"data/processed/resume_faiss/jd_text_{user_id}.txt"
+    with open(jd_text_path, "w") as f:
+        f.write(job_description)
+    
+    return True
+```
+**Location**: `resume_processor.py:118-142`
+
+### Retrieval
+
+```python
+def get_jd_embedding(user_id):
+    jd_path = f"data/processed/resume_faiss/jd_embedding_{user_id}.npy"
+    jd_text_path = f"data/processed/resume_faiss/jd_text_{user_id}.txt"
+    
+    if not os.path.exists(jd_path) or not os.path.exists(jd_text_path):
+        return None, None
+    
+    embedding = np.load(jd_path)
+    with open(jd_text_path, "r") as f:
+        jd_text = f.read()
+    
+    return embedding, jd_text
+```
+**Location**: `resume_processor.py:145-160`
+
+## Performance Optimizations
+
+### 1. Batch Encoding
+
+```python
+# Slow: Encode one at a time
+for text in texts:
+    embedding = embedder.encode([text])
+
+# Fast: Batch encoding
+embeddings = embedder.encode(texts, batch_size=32)
+```
+
+### 2. GPU Acceleration
+
+```python
+# Use GPU if available
+device = "cuda" if torch.cuda.is_available() else "cpu"
+embedder = SentenceTransformer("all-MiniLM-L6-v2", device=device)
+```
+
+### 3. Index Caching
+
+```python
+# Global cache to avoid repeated loading
+_INDEX_CACHE = None
+
+def get_index():
+    global _INDEX_CACHE
+    if _INDEX_CACHE is None:
+        _INDEX_CACHE = faiss.read_index(INDEX_PATH)
+    return _INDEX_CACHE
+```
+**Location**: `rag.py:66-117`
+
+### 4. Float32 Precision
+
+```python
+# FAISS requires float32 (not float64)
+embeddings_array = np.asarray(embeddings, dtype="float32")
+```
+
+## Index Statistics
+
+### Knowledge Base Index
+
+```python
+# Check index size
+index = faiss.read_index("data/processed/faiss_mistral/index.faiss")
+print(f"Total vectors: {index.ntotal}")
+print(f"Dimension: {index.d}")
+print(f"Is trained: {index.is_trained}")
+```
+
+**Expected Output**:
+```
+Total vectors: 2847
+Dimension: 384
+Is trained: True
+```
+
+### Resume Index
+
+```python
+# Per-user statistics
+metas = load_json(f"data/processed/resume_faiss/resume_metas_{user_id}.json")
+print(f"Resume chunks: {len(metas)}")
+print(f"Average chunk size: {np.mean([m['chunk_size'] for m in metas]):.0f} chars")
+```
+
+## File Structure
+
+```
+data/processed/
+├── faiss_mistral/
+│   ├── index.faiss          # Knowledge base vectors
+│   └── metas.json           # KB metadata
+├── resume_faiss/
+│   ├── resume_index_{user_id}.faiss
+│   ├── resume_metas_{user_id}.json
+│   ├── jd_embedding_{user_id}.npy
+│   └── jd_text_{user_id}.txt
+└── kb_clean.json            # Source knowledge base
+```
+
+## Key Functions Summary
+
+| Function | Purpose | Location |
+|----------|---------|----------|
+| `build_faiss_index()` | Build KB index from Q&A pairs | mistral_faiss.py:43 |
+| `process_resume_for_faiss()` | Create user resume index | resume_processor.py:29 |
+| `search_resume_faiss()` | Search user resume | resume_processor.py:77 |
+| `store_jd_embedding()` | Save JD embedding | resume_processor.py:118 |
+| `get_jd_embedding()` | Load JD embedding | resume_processor.py:145 |
+| `load_index_and_metas()` | Load cached KB index | rag.py:98 |
+| `get_embedder()` | Get cached embedder | rag.py:74 |
+
+## Best Practices
+
+1. **Always Normalize**: Use `normalize_embeddings=True` for consistent similarity scores
+2. **Cache Models**: Load embedder once, reuse across requests
+3. **Batch Operations**: Encode multiple texts together for speed
+4. **Float32**: Convert embeddings to `float32` before adding to FAISS
+5. **Metadata Sync**: Keep metadata array aligned with FAISS index positions
+6. **Over-fetch & Filter**: Search k*3, filter to k for topic-specific retrieval

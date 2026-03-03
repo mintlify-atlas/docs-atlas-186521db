@@ -1,0 +1,168 @@
+---
+title: Configuration
+description: Configure environment variables, database, and application settings
+---
+
+## Environment Variables
+
+The platform requires specific environment variables to function properly. Create a `.env` file in the root `be` directory.
+
+<Steps>
+  <Step title="Create .env file">
+    In the `be` directory, create a new file named `.env`:
+    
+    ```bash
+    touch .env
+    ```
+  </Step>
+
+  <Step title="Add required variables">
+    Add the following environment variables to your `.env` file:
+    
+    ```env .env
+    MISTRAL_API_KEY=your_mistral_api_key_here
+    SECRET_KEY=your-secret-key-here
+    JWT_SECRET_KEY=your-jwt-secret-key-here
+    MISTRAL_MODEL=mistral-large-latest
+    ```
+  </Step>
+</Steps>
+
+### Environment Variables Reference
+
+<ParamField path="MISTRAL_API_KEY" type="string" required>
+  Your Mistral API key for AI-powered features. Get your API key from the [Mistral Console](https://console.mistral.ai/).
+</ParamField>
+
+<ParamField path="SECRET_KEY" type="string" required>
+  Flask application secret key for session management. Generate a secure random string.
+  
+  **Default:** `your-secret-key-here` (change this in production)
+</ParamField>
+
+<ParamField path="JWT_SECRET_KEY" type="string" required>
+  Secret key for JSON Web Token authentication. Should be different from SECRET_KEY.
+  
+  **Default:** `your-jwt-secret-key-here` (change this in production)
+</ParamField>
+
+<ParamField path="MISTRAL_MODEL" type="string">
+  The Mistral model to use for AI responses.
+  
+  **Default:** `mistral-large-latest`
+</ParamField>
+
+<Warning>
+  Never commit your `.env` file to version control. Ensure it's listed in your `.gitignore` file.
+</Warning>
+
+---
+
+## Database Configuration
+
+The platform uses SQLite as its database, configured automatically through Flask-SQLAlchemy.
+
+### Database Settings
+
+The following database settings are defined in `backend/config.py`:
+
+```python
+SQLALCHEMY_DATABASE_URI = 'sqlite:///interview_prep.db'
+SQLALCHEMY_TRACK_MODIFICATIONS = False
+```
+
+### Database Initialization
+
+<Info>
+  The database is automatically initialized when you first run the backend application. The database file will be created at `instance/interview_prep.db`.
+</Info>
+
+No manual database setup is required. When you run the backend server for the first time:
+
+1. The `backend/instance` directory is created automatically
+2. The SQLite database file `interview_prep.db` is initialized
+3. All required tables are created based on your models
+
+### First-Time User Setup
+
+<Note>
+  The database starts fresh with no users. You must **Sign Up** a new user account through the application UI to begin using the platform.
+</Note>
+
+---
+
+## Configuration Files
+
+The platform uses several configuration files stored in the `config/` directory:
+
+### Topic Rules Configuration
+
+**Location:** `config/topic_rules.json`
+
+Defines rules and mappings for categorizing interview questions by topic.
+
+### Taxonomy Configuration
+
+**Location:** `config/taxonomy.json`
+
+Defines the hierarchical structure of topics and subtopics for the knowledge base.
+
+---
+
+## Additional Settings
+
+### File Upload Configuration
+
+The following settings control file uploads (resumes, documents):
+
+<ParamField path="UPLOAD_FOLDER" type="string">
+  Directory for storing uploaded files.
+  
+  **Default:** `uploads`
+</ParamField>
+
+<ParamField path="MAX_CONTENT_LENGTH" type="integer">
+  Maximum file upload size in bytes.
+  
+  **Default:** `16777216` (16 MB)
+</ParamField>
+
+### JWT Token Settings
+
+<ParamField path="JWT_ACCESS_TOKEN_EXPIRE" type="timedelta">
+  Expiration time for JWT access tokens.
+  
+  **Default:** `24 hours`
+</ParamField>
+
+---
+
+## RAG System Paths
+
+The Retrieval-Augmented Generation (RAG) system uses the following path configurations:
+
+```python
+RAG_DIRS = [
+    PROJECT_ROOT / "data" / "processed" / "faiss_mistral",
+    Path("data") / "processed" / "faiss_mistral"
+]
+
+INDEX_CANDIDATES = [
+    "faiss_index_mistral.idx",
+    "index.faiss",
+    "faiss_index_mistral.faiss",
+    "faiss_index.idx"
+]
+
+METAS_CANDIDATES = [
+    "metas.json",
+    "metas.jsonl",
+    "metas_full.json"
+]
+```
+
+These paths are used to locate the FAISS vector index and metadata files. See [Data Indexing](/setup/data-indexing) for more details.
+
+<Check>
+  Configuration complete! Next, proceed to [Data Indexing](/setup/data-indexing) to build your knowledge base.
+</Check>

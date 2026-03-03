@@ -1,0 +1,421 @@
+---
+title: Interview Endpoints
+description: Adaptive interview session management and question generation
+icon: comments
+---
+
+## Overview
+
+These endpoints power the adaptive interview system, generating personalized questions based on user mastery and evaluating responses in real-time.
+
+<Note>
+  All endpoints require JWT authentication via `Authorization: Bearer <token>` header.
+</Note>
+
+---
+
+## Generate Interview Questions
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.yourapp.com/api/mock_interview/questions \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_description": "Senior Python Developer with ML experience",
+    "question_count": 8,
+    "variation_seed": "focus_on_scalability"
+  }'
+```
+</RequestExample>
+
+Generate tailored interview questions using Mistral AI and resume context.
+
+<ParamField body="job_description" type="string" required>
+  Job description to match questions against
+</ParamField>
+
+<ParamField body="question_count" type="integer" default="8">
+  Number of questions (3-15)
+</ParamField>
+
+<ParamField body="variation_seed" type="string">
+  Optional seed for question variation
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Request status
+</ResponseField>
+
+<ResponseField name="questions" type="array">
+  Generated interview questions
+  <Expandable title="question object">
+    <ResponseField name="question" type="string">
+      The interview question
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      Question type: `technical`, `behavioral`, `project-based`, or `situational`
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="question_count" type="integer">
+  Total questions generated
+</ResponseField>
+
+<ResponseExample>
+```json Success Response
+{
+  "success": true,
+  "question_count": 8,
+  "questions": [
+    {
+      "question": "Describe how you would architect a scalable ML pipeline for real-time predictions",
+      "type": "technical"
+    },
+    {
+      "question": "Tell me about a time when you optimized a slow Python application",
+      "type": "behavioral"
+    },
+    {
+      "question": "Walk me through your experience with distributed systems",
+      "type": "project-based"
+    }
+  ]
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "error": "Please upload your resume first"
+}
+```
+</ResponseExample>
+
+---
+
+## Evaluate Interview Answer
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.yourapp.com/api/mock_interview/evaluate_answer \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": {
+      "question": "Explain the difference between REST and GraphQL",
+      "type": "technical"
+    },
+    "answer": "REST uses multiple endpoints while GraphQL uses a single endpoint...",
+    "job_description": "Backend Engineer role"
+  }'
+```
+</RequestExample>
+
+Evaluate a user's interview answer using AI and resume context.
+
+<ParamField body="question" type="object" required>
+  Question object with `question` and `type` fields
+</ParamField>
+
+<ParamField body="answer" type="string" required>
+  User's answer text
+</ParamField>
+
+<ParamField body="job_description" type="string">
+  Job description for context
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Request status
+</ResponseField>
+
+<ResponseField name="evaluation" type="object">
+  Detailed answer evaluation
+  <Expandable title="evaluation fields">
+    <ResponseField name="score" type="integer">
+      Score from 0-100
+    </ResponseField>
+    <ResponseField name="grade" type="string">
+      Letter grade (A, B, C, D)
+    </ResponseField>
+    <ResponseField name="strengths" type="string">
+      What the answer did well
+    </ResponseField>
+    <ResponseField name="improvements" type="string">
+      Areas for improvement
+    </ResponseField>
+    <ResponseField name="ideal_answer" type="string">
+      Expected answer for reference
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "evaluation": {
+    "score": 85,
+    "grade": "A",
+    "strengths": "Clear comparison of REST and GraphQL, mentioned key differences like endpoint structure and data fetching",
+    "improvements": "Could expand on use cases and performance trade-offs",
+    "ideal_answer": "REST uses multiple endpoints for different resources, while GraphQL provides a single endpoint..."
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## Get Interview History
+
+<RequestExample>
+```bash cURL
+curl -X GET https://api.yourapp.com/api/user/history \
+  -H "Authorization: Bearer <token>"
+```
+</RequestExample>
+
+Retrieve user's complete interview history across all session types.
+
+<ResponseField name="success" type="boolean">
+  Request status
+</ResponseField>
+
+<ResponseField name="sessions" type="array">
+  Interview session records
+  <Expandable title="session object">
+    <ResponseField name="id" type="integer">
+      Session ID
+    </ResponseField>
+    <ResponseField name="session_type" type="string">
+      Type: `agentic`, `mock_resume`, `hr`, `debugging`
+    </ResponseField>
+    <ResponseField name="score" type="float">
+      Overall session score (0-100)
+    </ResponseField>
+    <ResponseField name="duration" type="integer">
+      Session duration in seconds
+    </ResponseField>
+    <ResponseField name="created_at" type="string">
+      Timestamp (ISO 8601)
+    </ResponseField>
+    <ResponseField name="questions" type="object">
+      Questions and answers data
+    </ResponseField>
+    <ResponseField name="speech_metrics" type="object">
+      Voice interview metrics (if applicable)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "sessions": [
+    {
+      "id": 42,
+      "session_type": "agentic",
+      "score": 78.5,
+      "duration": 1245,
+      "created_at": "2026-03-03T14:30:00Z",
+      "questions": {
+        "questions": [{"question": "Explain SOLID principles"}],
+        "answers": {"0": "SOLID is an acronym..."}
+      },
+      "speech_metrics": {
+        "wpm": 145,
+        "fluency_score": 0.82,
+        "speaking_ratio": 0.65
+      }
+    }
+  ]
+}
+```
+</ResponseExample>
+
+---
+
+## RAG Query
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.yourapp.com/api/query \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "What is a binary search tree?",
+    "top_k": 5
+  }'
+```
+</RequestExample>
+
+Query the knowledge base using RAG (Retrieval-Augmented Generation).
+
+<ParamField body="query" type="string" required>
+  Question or search query
+</ParamField>
+
+<ParamField body="top_k" type="integer" default="5">
+  Number of results to retrieve
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Request status
+</ResponseField>
+
+<ResponseField name="answer" type="string">
+  Generated answer from knowledge base
+</ResponseField>
+
+<ResponseField name="sources" type="array">
+  Source documents used for answer
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "answer": "A binary search tree (BST) is a node-based data structure where each node has at most two children...",
+  "sources": [
+    {"text": "BST definition...", "_score": 0.92},
+    {"text": "BST operations...", "_score": 0.87}
+  ]
+}
+```
+</ResponseExample>
+
+---
+
+## Generate Coding Questions
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.yourapp.com/api/coding/questions \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question_count": 3,
+    "difficulty": "medium"
+  }'
+```
+</RequestExample>
+
+Generate SQL or Pandas coding challenges.
+
+<ParamField body="question_count" type="integer" default="3">
+  Number of coding questions
+</ParamField>
+
+<ParamField body="difficulty" type="string" default="medium">
+  Difficulty: `easy`, `medium`, or `hard`
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Request status
+</ResponseField>
+
+<ResponseField name="questions" type="array">
+  Generated coding challenges
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "questions": [
+    {
+      "id": 1,
+      "question": "Write a SQL query to find the top 5 customers by total purchase amount",
+      "language": "sql",
+      "difficulty": "medium",
+      "expected_output": "SELECT customer_id, SUM(amount)..."
+    }
+  ]
+}
+```
+</ResponseExample>
+
+---
+
+## Evaluate Coding Answer
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.yourapp.com/api/coding/evaluate \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": {"question": "Find top 5 customers"},
+    "user_code": "SELECT customer_id, SUM(amount) FROM orders GROUP BY customer_id ORDER BY SUM(amount) DESC LIMIT 5",
+    "language": "sql"
+  }'
+```
+</RequestExample>
+
+Evaluate user's SQL or Pandas code submission.
+
+<ParamField body="question" type="object" required>
+  Question object
+</ParamField>
+
+<ParamField body="user_code" type="string" required>
+  User's code solution
+</ParamField>
+
+<ParamField body="language" type="string" default="sql">
+  Code language: `sql` or `pandas`
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Request status
+</ResponseField>
+
+<ResponseField name="evaluation" type="object">
+  Code evaluation results
+  <Expandable title="evaluation fields">
+    <ResponseField name="is_correct" type="boolean">
+      Whether code is correct
+    </ResponseField>
+    <ResponseField name="score" type="integer">
+      Score from 0-100
+    </ResponseField>
+    <ResponseField name="feedback" type="string">
+      AI-generated feedback
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "evaluation": {
+    "is_correct": true,
+    "score": 95,
+    "feedback": "Great solution! Proper use of GROUP BY and ORDER BY. Consider adding column aliases for clarity."
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## Error Responses
+
+| Status Code | Description |
+|-------------|-------------|
+| `400` | Bad request (missing required fields) |
+| `401` | Unauthorized (invalid/expired token) |
+| `404` | Resource not found |
+| `500` | Internal server error |
+
+```json
+{
+  "success": false,
+  "error": "No resume uploaded"
+}
+```

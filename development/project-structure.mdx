@@ -1,0 +1,264 @@
+---
+title: Project Structure
+description: Complete overview of the codebase organization, directory structure, and key files
+---
+
+This page provides a comprehensive guide to the CS Interview Assistant project structure, explaining the purpose of each directory and key files.
+
+## Directory Tree
+
+```
+be/
+├── backend/                    # Flask application and AI engines
+│   ├── agent/                  # Adaptive interview system
+│   │   ├── adaptive_controller.py
+│   │   ├── adaptive_analyzer.py
+│   │   ├── adaptive_planner.py
+│   │   ├── adaptive_state.py
+│   │   ├── adaptive_question_bank.py
+│   │   ├── adaptive_decision.py
+│   │   ├── topic_selector.py
+│   │   ├── subtopic_tracker.py
+│   │   └── semantic_dedup.py
+│   ├── app.py                  # Main Flask application entry point
+│   ├── models.py               # SQLAlchemy database models
+│   ├── auth.py                 # Authentication routes and logic
+│   ├── config.py               # Application configuration
+│   ├── rag.py                  # RAG system with Mistral AI
+│   ├── coding_engine.py        # SQL/Pandas coding practice
+│   ├── mock_interview_engine.py # Resume-based mock interviews
+│   ├── interview_analyzer.py   # Speech and performance analytics
+│   ├── resume_processor.py     # Resume parsing and indexing
+│   ├── email_service.py        # Email notifications
+│   └── assemblyai_websocket_stream.py  # Real-time STT
+├── frontend/                   # React application
+│   ├── public/                 # Static assets
+│   │   ├── manifest.json
+│   │   └── pcm-processor.js    # Audio processing worker
+│   ├── src/
+│   │   ├── components/         # React components
+│   │   │   ├── ActionPlan/
+│   │   │   ├── AgenticInterview/
+│   │   │   ├── Auth/
+│   │   │   ├── Chat/
+│   │   │   ├── ConversationalInterview/
+│   │   │   ├── Dashboard/
+│   │   │   ├── HRInterview/
+│   │   │   ├── Layout/
+│   │   │   ├── LiveStreamingInterview/
+│   │   │   ├── MockInterview/
+│   │   │   ├── Profile/
+│   │   │   └── Resume/
+│   │   ├── hooks/              # Custom React hooks
+│   │   ├── services/           # API service layer
+│   │   ├── styles/             # CSS and styling
+│   │   ├── App.js              # Main React component
+│   │   └── App.test.js         # Test file
+│   ├── package.json            # NPM dependencies
+│   └── package-lock.json
+├── config/                     # Configuration files
+│   ├── taxonomy.json           # Topic hierarchy (OS, DBMS, OOP)
+│   └── topic_rules.json        # Keyword mappings for classification
+├── data/                       # Knowledge base data
+│   ├── raw/                    # Raw JSON Q&A files
+│   │   ├── complete_dbms.json
+│   │   ├── oops_qna_simplified.json
+│   │   └── os_qna.json
+│   └── processed/              # Generated indices and metadata
+│       ├── kb_clean.json       # Cleaned and categorized Q&A
+│       ├── kb_chunks.jsonl     # Text chunks for embedding
+│       ├── kg_edges.csv        # Knowledge graph relationships
+│       ├── faiss_mistral/      # FAISS vector index
+│       │   ├── index.faiss
+│       │   ├── metas.json
+│       │   └── ids.json
+│       └── resume_faiss/       # User resume embeddings
+├── scripts/                    # Data preparation utilities
+│   ├── prepare_kb.py           # Process raw Q&A data
+│   ├── mistral_faiss.py        # Build Mistral-compatible index
+│   ├── rag_query.py            # Test RAG system
+│   ├── compare.py              # Compare indexing methods
+│   └── paraphrased.py          # Text augmentation
+├── instance/                   # Runtime data (auto-generated)
+│   └── interview_prep.db       # SQLite database
+├── requirements.txt            # Python dependencies
+├── .env                        # Environment variables (not in repo)
+├── RUN_GUIDE.md               # Quick start guide
+└── README.md                   # Project overview
+```
+
+## Major Directories Explained
+
+### backend/ - Flask Application
+
+The core server-side application built with Flask.
+
+**Key Files:**
+
+- **app.py** (backend/app.py:1): Main application entry point
+  - Initializes Flask app with CORS, SocketIO, and SQLAlchemy
+  - Defines all API routes for authentication, interviews, and data management
+  - Handles real-time WebSocket communication for live interviews
+  - Manages database initialization and session handling
+
+- **models.py** (backend/models.py:1): Database schema definitions
+  - `User`: User accounts with authentication and profile data
+  - `InterviewSession`: Interview history and performance metrics
+  - `UserMastery`: Topic-level mastery tracking with concept data
+  - `StudyActionPlan`: Personalized learning recommendations
+
+- **rag.py** (backend/rag.py:1): Retrieval-Augmented Generation system
+  - Integrates Mistral AI for question answering
+  - Manages FAISS vector index for semantic search
+  - Implements topic classification and domain filtering
+  - Provides context-aware responses from knowledge base
+
+- **coding_engine.py** (backend/coding_engine.py:1): SQL/Pandas practice
+  - Generates LeetCode-style coding questions
+  - Evaluates user code against test cases
+  - Provides model solutions in SQL and Python
+
+- **mock_interview_engine.py** (backend/mock_interview_engine.py:1): Resume-based interviews
+  - Generates questions tailored to resume and job description
+  - Evaluates answers with detailed feedback
+  - Provides session-level insights
+
+- **interview_analyzer.py**: Performance analytics
+  - Speech-to-text conversion
+  - Audio analysis (VAD, speech metrics)
+  - Semantic similarity scoring
+  - Research-grade interview metrics
+
+- **resume_processor.py**: Document processing
+  - Parses PDF and DOCX resumes
+  - Creates FAISS embeddings from resume content
+  - Enables resume-based question targeting
+
+### backend/agent/ - Adaptive Interview System
+
+An intelligent agent-based system that personalizes technical interviews:
+
+- **adaptive_controller.py**: Orchestrates the adaptive interview flow
+- **adaptive_analyzer.py**: Analyzes user performance in real-time
+- **adaptive_planner.py**: Plans question difficulty and topic selection
+- **adaptive_state.py**: Maintains interview session state
+- **adaptive_question_bank.py**: Manages available questions by topic/difficulty
+- **topic_selector.py**: Selects optimal topics based on mastery
+- **subtopic_tracker.py**: Tracks coverage of subtopics
+- **semantic_dedup.py**: Prevents duplicate or similar questions
+
+### frontend/ - React Application
+
+A modern single-page application built with React 19.
+
+**Component Organization:**
+
+- **Auth/**: Login, Signup, ForgotPassword, ResetPassword
+- **Dashboard/**: Main dashboard with FeatureCard and StatsCard
+- **AgenticInterview/**: Adaptive interview with avatar and personas
+- **ConversationalInterview/**: Real-time conversational practice
+- **HRInterview/**: HR interview with QuestionCard and SessionHistory
+- **MockInterview/**: Resume-based mock interviews
+- **LiveStreamingInterview/**: Real-time streaming with AssemblyAI
+- **Chat/**: ChatInterface, Message, WelcomeMessage components
+- **Profile/**: User profile management
+- **Resume/**: Resume upload and management
+- **ActionPlan/**: Study plan generation
+- **Layout/**: Header, Sidebar, ThemeToggle, LoadingSpinner
+
+**Key Frontend Files:**
+
+- **App.js** (frontend/src/App.js:1): Root component with routing
+- **package.json** (frontend/package.json:1): Dependencies and scripts
+  - React 19, React Router for navigation
+  - Axios for API calls, Socket.IO for real-time
+  - React Three Fiber for 3D avatars
+  - React Markdown for rendering formatted text
+
+### config/ - Configuration
+
+- **taxonomy.json**: Hierarchical structure of topics and subtopics
+  - Operating Systems (10 subtopics)
+  - DBMS (15 subtopics)
+  - OOP (8 subtopics)
+
+- **topic_rules.json**: Keyword mappings for automatic topic classification
+  - Maps keywords to specific topics and subtopics
+  - Used by `prepare_kb.py` during data processing
+
+### data/ - Knowledge Base
+
+**raw/**: Source Q&A data in JSON format
+- Each file contains questions and answers for a specific domain
+- Format: `[{"id": 1, "question": "...", "answer": "..."}]`
+
+**processed/**: Generated files for the RAG system
+- **kb_clean.json**: Normalized Q&A with topic/subtopic/difficulty labels
+- **kb_chunks.jsonl**: Text chunks prepared for embedding
+- **faiss_mistral/**: Vector index for semantic search
+- **resume_faiss/**: User-specific resume embeddings
+
+### scripts/ - Data Processing
+
+Utilities for preparing and indexing knowledge base data:
+
+- **prepare_kb.py** (scripts/prepare_kb.py:1): 
+  - Loads raw JSON files
+  - Normalizes and cleans text
+  - Assigns topics, subtopics, and difficulty levels
+  - Generates `kb_clean.json`
+
+- **mistral_faiss.py**: Builds FAISS index with Mistral-compatible embeddings
+
+- **rag_query.py**: Interactive testing interface for the RAG system
+
+### instance/ - Runtime Data
+
+- **interview_prep.db**: SQLite database (auto-generated)
+  - Created automatically when running `app.py`
+  - Contains all user data, sessions, and mastery tracking
+  - Can be deleted to reset the database
+
+## Finding Specific Functionality
+
+### Authentication
+- Backend: backend/auth.py
+- Frontend: frontend/src/components/Auth/
+- Database models: backend/models.py (User class)
+
+### Interview Types
+- **Technical Q&A**: backend/rag.py, frontend/src/components/Chat/
+- **Adaptive Interview**: backend/agent/, frontend/src/components/AgenticInterview/
+- **Mock Interview**: backend/mock_interview_engine.py, frontend/src/components/MockInterview/
+- **HR Interview**: frontend/src/components/HRInterview/
+- **Coding Practice**: backend/coding_engine.py
+- **Live Streaming**: backend/assemblyai_websocket_stream.py, frontend/src/components/LiveStreamingInterview/
+
+### AI & ML Components
+- **RAG System**: backend/rag.py
+- **Vector Search**: FAISS indices in data/processed/
+- **Mistral Integration**: backend/rag.py, backend/coding_engine.py, backend/mock_interview_engine.py
+- **Audio Processing**: backend/interview_analyzer.py
+- **Resume Analysis**: backend/resume_processor.py
+
+### User Data
+- **Profile Management**: backend/models.py (User), frontend/src/components/Profile/
+- **Mastery Tracking**: backend/models.py (UserMastery)
+- **Session History**: backend/models.py (InterviewSession)
+- **Action Plans**: backend/models.py (StudyActionPlan)
+
+### API Endpoints
+All API routes are defined in backend/app.py. Common patterns:
+- `/api/auth/*` - Authentication
+- `/api/user/*` - User management
+- `/api/interview/*` - Interview sessions
+- `/api/rag/*` - RAG queries
+- `/api/resume/*` - Resume processing
+
+## Next Steps
+
+Now that you understand the project structure:
+
+- Learn how to [add new features](/development/adding-features)
+- Explore the [API Authentication](/api/authentication) and [Interview Endpoints](/api/interview-endpoints) for detailed endpoint documentation
+- Check the [Configuration Guide](/setup/configuration) for customization options

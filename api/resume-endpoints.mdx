@@ -1,0 +1,408 @@
+---
+title: Resume Endpoints
+description: Resume upload, processing, and FAISS-based semantic search
+icon: file-text
+---
+
+## Overview
+
+The resume endpoints handle document upload, text extraction, FAISS indexing, and semantic search for personalized interview preparation.
+
+<Note>
+  All endpoints require JWT authentication via `Authorization: Bearer <token>` header.
+</Note>
+
+---
+
+## Upload Resume
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.yourapp.com/api/upload_resume \
+  -H "Authorization: Bearer <token>" \
+  -F "resume=@/path/to/resume.pdf" \
+  -F "job_description=Senior Backend Engineer with Python and AWS experience"
+```
+</RequestExample>
+
+Upload and process a resume file with optional job description for gap analysis.
+
+<ParamField body="resume" type="file" required>
+  Resume file (PDF or DOCX, max 16MB)
+</ParamField>
+
+<ParamField body="job_description" type="string">
+  Job description for semantic matching and gap analysis
+</ParamField>
+
+### Supported File Formats
+
+- **PDF** (.pdf) - Extracted using PyPDF2
+- **DOCX** (.docx) - Extracted using python-docx
+
+<ResponseField name="success" type="boolean">
+  Upload and processing status
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success or error message
+</ResponseField>
+
+<ResponseField name="parsed_data" type="object">
+  Extracted resume data
+  <Expandable title="parsed_data fields">
+    <ResponseField name="skills" type="array">
+      Extracted skills (uppercase, cleaned)
+    </ResponseField>
+    <ResponseField name="experience_years" type="integer">
+      Years of experience detected
+    </ResponseField>
+    <ResponseField name="projects" type="array">
+      Projects with name and tech stack
+    </ResponseField>
+    <ResponseField name="internships" type="array">
+      Internship entries
+    </ResponseField>
+    <ResponseField name="certifications" type="array">
+      Certifications listed
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="faiss_indexed" type="boolean">
+  Whether FAISS indexing completed
+</ResponseField>
+
+<ResponseField name="chunks_created" type="integer">
+  Number of text chunks created for semantic search
+</ResponseField>
+
+<ResponseField name="gap_analysis" type="object">
+  Job fit analysis (if job_description provided)
+  <Expandable title="gap_analysis fields">
+    <ResponseField name="match_percentage" type="float">
+      Keyword match percentage (0-100)
+    </ResponseField>
+    <ResponseField name="semantic_similarity" type="float">
+      Semantic similarity score (0-1)
+    </ResponseField>
+    <ResponseField name="matching_skills" type="array">
+      Skills that match job description
+    </ResponseField>
+    <ResponseField name="missing_skills" type="array">
+      Skills required but not in resume
+    </ResponseField>
+    <ResponseField name="gap_severity" type="string">
+      `Low`, `Medium`, or `High`
+    </ResponseField>
+    <ResponseField name="experience_fit" type="string">
+      Whether experience meets requirements
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Success Response
+{
+  "success": true,
+  "message": "Resume uploaded and processed successfully",
+  "parsed_data": {
+    "skills": ["PYTHON", "FLASK", "AWS", "DOCKER", "SQL"],
+    "experience_years": 3,
+    "projects": [
+      {
+        "name": "E-commerce Platform",
+        "tech_stack": ["PYTHON", "DJANGO", "POSTGRESQL"]
+      }
+    ],
+    "internships": ["Software Engineering Intern at TechCorp"],
+    "certifications": ["AWS Certified Developer"]
+  },
+  "faiss_indexed": true,
+  "chunks_created": 12,
+  "gap_analysis": {
+    "match_percentage": 78.5,
+    "semantic_similarity": 0.842,
+    "matching_skills": ["PYTHON", "AWS", "SQL"],
+    "missing_skills": ["KUBERNETES", "MICROSERVICES"],
+    "gap_severity": "Low",
+    "experience_fit": "Good fit"
+  }
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Invalid file type. Only PDF and DOCX are supported"
+}
+```
+</ResponseExample>
+
+<Warning>
+  Maximum file size is 16MB. Files must be PDF or DOCX format.
+</Warning>
+
+---
+
+## Resume Gap Analysis
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.yourapp.com/api/resume/gap-analysis \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_description": "Senior Python Developer with 5+ years experience in ML and cloud platforms"
+  }'
+```
+</RequestExample>
+
+Analyze resume fit against a job description using keyword and semantic matching.
+
+<ParamField body="job_description" type="string" required>
+  Job description text to analyze against
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Request status
+</ResponseField>
+
+<ResponseField name="gap_analysis" type="object">
+  Detailed gap analysis results
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "gap_analysis": {
+    "match_percentage": 65.2,
+    "semantic_similarity": 0.731,
+    "matching_skills": ["PYTHON", "MACHINE LEARNING", "AWS"],
+    "missing_skills": ["TENSORFLOW", "KUBERNETES", "MLOPS"],
+    "gap_severity": "Medium",
+    "experience_required": 5,
+    "experience_fit": "May need more experience",
+    "jd_skills_found": ["Python", "Machine Learning", "AWS", "TensorFlow", "Kubernetes"],
+    "section_gaps": {
+      "technical": ["TENSORFLOW", "KUBERNETES", "MLOPS"],
+      "experience": [],
+      "certifications": []
+    }
+  }
+}
+```
+</ResponseExample>
+
+---
+
+## Get Resume Analysis
+
+<RequestExample>
+```bash cURL
+curl -X GET https://api.yourapp.com/api/resume/analysis \
+  -H "Authorization: Bearer <token>"
+```
+</RequestExample>
+
+Retrieve previously parsed resume data.
+
+<ResponseField name="success" type="boolean">
+  Request status
+</ResponseField>
+
+<ResponseField name="resume_data" type="object">
+  Parsed resume information (same structure as upload response)
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "resume_data": {
+    "skills": ["PYTHON", "JAVASCRIPT", "REACT"],
+    "experience_years": 4,
+    "projects": [...],
+    "internships": [...],
+    "certifications": [...]
+  }
+}
+```
+
+```json No Resume
+{
+  "success": false,
+  "error": "No resume uploaded yet"
+}
+```
+</ResponseExample>
+
+---
+
+## Get Resume Chunks
+
+<RequestExample>
+```bash cURL
+curl -X GET https://api.yourapp.com/api/resume/chunks \
+  -H "Authorization: Bearer <token>"
+```
+</RequestExample>
+
+Retrieve all FAISS-indexed resume text chunks.
+
+<ResponseField name="success" type="boolean">
+  Request status
+</ResponseField>
+
+<ResponseField name="chunks" type="array">
+  Resume text chunks
+  <Expandable title="chunk object">
+    <ResponseField name="id" type="string">
+      Chunk identifier
+    </ResponseField>
+    <ResponseField name="chunk_id" type="integer">
+      Sequential chunk number
+    </ResponseField>
+    <ResponseField name="user_id" type="integer">
+      User ID
+    </ResponseField>
+    <ResponseField name="text" type="string">
+      Chunk text content
+    </ResponseField>
+    <ResponseField name="chunk_size" type="integer">
+      Number of characters
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "chunks": [
+    {
+      "id": "resume_chunk_123_0",
+      "chunk_id": 0,
+      "user_id": 123,
+      "text": "Senior Software Engineer with 5 years of experience in Python and cloud platforms...",
+      "chunk_size": 245
+    },
+    {
+      "id": "resume_chunk_123_1",
+      "chunk_id": 1,
+      "user_id": 123,
+      "text": "Skills: Python, Flask, AWS, Docker, PostgreSQL, React, Node.js...",
+      "chunk_size": 187
+    }
+  ]
+}
+```
+</ResponseExample>
+
+---
+
+## Resume-Based Questions
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.yourapp.com/api/resume_based_questions \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "job_description": "Full Stack Developer position",
+    "question_count": 5,
+    "variation_seed": "focus_projects"
+  }'
+```
+</RequestExample>
+
+Generate interview questions tailored to resume content using FAISS semantic search.
+
+<ParamField body="job_description" type="string">
+  Job description for context
+</ParamField>
+
+<ParamField body="question_count" type="integer" default="5">
+  Number of questions to generate
+</ParamField>
+
+<ParamField body="variation_seed" type="string">
+  Seed for question variation
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Request status
+</ResponseField>
+
+<ResponseField name="questions" type="array">
+  Generated questions
+</ResponseField>
+
+<ResponseField name="resume_chunks_found" type="integer">
+  Number of relevant resume chunks used
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "questions": [
+    {
+      "question": "Tell me about your e-commerce platform project and the technical challenges you faced",
+      "type": "project-based"
+    },
+    {
+      "question": "How have you used Docker in production environments?",
+      "type": "technical"
+    }
+  ],
+  "resume_chunks_found": 5
+}
+```
+</ResponseExample>
+
+---
+
+## FAISS Processing Details
+
+### Text Chunking Strategy
+
+- **Chunk Size**: 500 characters
+- **Overlap**: 50 characters
+- **Separators**: `\n\n`, `\n`, space
+- **Embedding Model**: `all-MiniLM-L6-v2` (SentenceTransformer)
+
+### Index Configuration
+
+- **Index Type**: FAISS `IndexFlatIP` (Inner Product for cosine similarity)
+- **Normalization**: L2-normalized embeddings
+- **Dimension**: 384 (model output)
+
+### Storage Locations
+
+```
+data/processed/resume_faiss/
+├── resume_index_{user_id}.faiss     # FAISS index
+├── resume_metas_{user_id}.json      # Metadata
+├── jd_embedding_{user_id}.npy       # Job description embedding
+└── jd_text_{user_id}.txt            # Job description text
+```
+
+---
+
+## Error Responses
+
+| Status Code | Description |
+|-------------|-------------|
+| `400` | Bad request (invalid file type, missing parameters) |
+| `401` | Unauthorized (invalid/expired token) |
+| `413` | File too large (>16MB) |
+| `500` | Internal server error (processing failed) |
+
+```json
+{
+  "success": false,
+  "message": "Failed to extract text from PDF"
+}
+```

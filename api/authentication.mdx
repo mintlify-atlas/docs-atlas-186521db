@@ -1,0 +1,304 @@
+---
+title: Authentication
+description: User authentication and session management endpoints
+icon: lock
+---
+
+## Overview
+
+The authentication system uses JWT (JSON Web Tokens) for secure API access. All protected endpoints require a valid JWT token in the `Authorization` header.
+
+### JWT Token Format
+
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+Tokens expire after 24 hours and must be refreshed by logging in again.
+
+---
+
+## Sign Up
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.yourapp.com/api/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "johndoe",
+    "email": "john@example.com",
+    "password": "secure123",
+    "full_name": "John Doe"
+  }'
+```
+</RequestExample>
+
+Create a new user account.
+
+<ParamField body="username" type="string" required>
+  Username (3-20 characters, alphanumeric and underscores only)
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  Valid email address
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Password (minimum 6 characters)
+</ParamField>
+
+<ParamField body="full_name" type="string">
+  User's full name
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether registration was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success or error message
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  User details
+  <Expandable title="properties">
+    <ResponseField name="id" type="integer">
+      User ID
+    </ResponseField>
+    <ResponseField name="username" type="string">
+      Username
+    </ResponseField>
+    <ResponseField name="email" type="string">
+      Email address
+    </ResponseField>
+    <ResponseField name="full_name" type="string">
+      Full name
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json Success Response
+{
+  "success": true,
+  "message": "Registration successful",
+  "user": {
+    "id": 123,
+    "username": "johndoe",
+    "email": "john@example.com",
+    "full_name": "John Doe"
+  }
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Email already registered"
+}
+```
+</ResponseExample>
+
+---
+
+## Login
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.yourapp.com/api/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "johndoe",
+    "password": "secure123"
+  }'
+```
+</RequestExample>
+
+Authenticate and receive a JWT token.
+
+<ParamField body="username" type="string" required>
+  Username (3-20 characters)
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  User password
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether login was successful
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  JWT access token (valid for 24 hours)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success or error message
+</ResponseField>
+
+<ResponseField name="user" type="object">
+  Authenticated user details
+</ResponseField>
+
+<ResponseExample>
+```json Success Response
+{
+  "success": true,
+  "message": "Login successful",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": 123,
+    "username": "johndoe",
+    "email": "john@example.com",
+    "full_name": "John Doe"
+  }
+}
+```
+
+```json Error Response
+{
+  "success": false,
+  "message": "Invalid username or password"
+}
+```
+</ResponseExample>
+
+---
+
+## Logout
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.yourapp.com/api/logout \
+  -H "Authorization: Bearer <your_token>"
+```
+</RequestExample>
+
+End the current session.
+
+<ResponseExample>
+```json Response
+{
+  "message": "Logged out successfully"
+}
+```
+</ResponseExample>
+
+---
+
+## Forgot Password
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.yourapp.com/api/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{"email": "john@example.com"}'
+```
+</RequestExample>
+
+Request a password reset link. A secure token is generated and emailed to the user (expires in 15 minutes).
+
+<ParamField body="email" type="string" required>
+  Registered email address
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Always true (to prevent email enumeration)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Generic success message
+</ResponseField>
+
+<ResponseExample>
+```json Response
+{
+  "success": true,
+  "message": "If that email is registered, you'll receive a reset link shortly."
+}
+```
+</ResponseExample>
+
+<Warning>
+  This endpoint always returns success to prevent email enumeration attacks.
+</Warning>
+
+---
+
+## Reset Password
+
+<RequestExample>
+```bash cURL
+curl -X POST https://api.yourapp.com/api/reset-password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "secure_reset_token_here",
+    "new_password": "newSecurePass123"
+  }'
+```
+</RequestExample>
+
+Reset password using the token from the email link.
+
+<ParamField body="token" type="string" required>
+  Reset token from email (48-character secure token)
+</ParamField>
+
+<ParamField body="new_password" type="string" required>
+  New password (minimum 6 characters)
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether password reset was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success or error message
+</ResponseField>
+
+<ResponseExample>
+```json Success Response
+{
+  "success": true,
+  "message": "Password updated successfully. You can now log in."
+}
+```
+
+```json Error - Expired Token
+{
+  "success": false,
+  "message": "This reset link has expired. Please request a new one"
+}
+```
+
+```json Error - Invalid Token
+{
+  "success": false,
+  "message": "Invalid or already-used reset link"
+}
+```
+</ResponseExample>
+
+<Note>
+  Reset tokens are single-use and expire after 15 minutes.
+</Note>
+
+---
+
+## Error Responses
+
+All authentication endpoints may return these error codes:
+
+| Status Code | Description |
+|-------------|-------------|
+| `400` | Bad request (validation error) |
+| `401` | Unauthorized (invalid credentials or expired token) |
+| `500` | Internal server error |
+
+### Example Error Response
+
+```json
+{
+  "error": "Invalid or expired token"
+}
+```

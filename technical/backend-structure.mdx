@@ -1,0 +1,640 @@
+---
+title: Backend Structure
+description: Flask application architecture, modules, agents, and API organization
+---
+
+## Flask Application Overview
+
+The backend is a **Flask application** with **Socket.IO WebSocket** support, organized into specialized modules for different AI processing tasks.
+
+### Project Structure
+
+```
+backend/
+├── app.py                          # Main Flask application (120KB, 3500+ lines)
+├── models.py                       # SQLAlchemy database models
+├── config.py                       # Configuration management
+├── auth.py                         # Authentication utilities
+│
+├── AI Engines
+├── rag.py                          # RAG pipeline (Mistral + FAISS)
+├── mock_interview_engine.py        # Mock interview question generator
+├── coding_engine.py                # Coding interview problems
+├── interview_analyzer.py           # Signal processing & speech analysis
+│
+├── External Services
+├── assemblyai_websocket_stream.py  # AssemblyAI real-time transcription
+├── resume_processor.py             # Resume parsing & vectorization
+├── email_service.py                # Email notifications
+│
+├── Agent System
+└── agent/
+    ├── __init__.py
+    ├── adaptive_controller.py      # Main orchestration agent (40KB)
+    ├── adaptive_analyzer.py        # Answer quality analyzer
+    ├── adaptive_decision.py        # Decision-making logic
+    ├── adaptive_planner.py         # Study plan generator
+    ├── adaptive_question_bank.py   # Dynamic question bank (63KB)
+    ├── adaptive_state.py           # Session state management
+    ├── subtopic_tracker.py         # Concept mastery tracking
+    ├── topic_selector.py           # Adaptive topic selection
+    └── semantic_dedup.py           # Question deduplication
+```
+
+## Core Module: app.py
+
+`app.py` is the **central orchestrator** (3500+ lines) that initializes all services and handles routing.
+
+### Key Responsibilities
+
+1. **Application Initialization**
+2. **Database Setup**
+3. **WebSocket Event Handling**
+4. **HTTP API Routes**
+5. **Real-time Audio Processing**
+
+### Application Setup
+
+```python
+from flask import Flask
+from flask_socketio import SocketIO
+from flask_login import LoginManager
+from flask_cors import CORS
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///instance/interview_prep.db'
+
+# Initialize extensions
+db.init_app(app)
+CORS(app, supports_credentials=True)
+login_manager = LoginManager()
+login_manager.init_app(app)
+
+# WebSocket with threading mode
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+```
+
+### Path Configuration
+
+```python
+# Absolute paths for cross-platform compatibility
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))  # /backend
+PROJECT_ROOT = os.path.dirname(BASE_DIR)                # /root
+INSTANCE_PATH = os.path.join(PROJECT_ROOT, 'instance')
+UPLOAD_PATH = os.path.join(PROJECT_ROOT, 'uploads')
+
+os.makedirs(INSTANCE_PATH, exist_ok=True)
+os.makedirs(UPLOAD_PATH, exist_ok=True)
+```
+
+### Class: SpeechMetrics
+
+**Location:** `app.py:73-88`
+
+Tracks research-grade speech timing metrics:
+
+```python
+class SpeechMetrics:
+    def __init__(self):
+        self.session_start = time.time()
+        self.session_end = None
+        
+        self.speaking_time = 0.0
+        self.current_silence = 0.0
+        
+        self.long_pause_count = 0
+        self.last_audio_timestamp = None
+        
+        self.questions_answered = 0
+        self.last_speech_end_time = None
+```
+
+**Purpose:**
+- Tracks speaking vs. silence time
+- Counts long pauses (> 2 seconds)
+- Calculates effective speaking rate
+- Stored in `InterviewSession.speech_metrics` as JSON
+
+## Database Models (models.py)
+
+### User Model
+
+```python
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(120), nullable=False)
+    
+    # Profile
+    full_name = db.Column(db.String(100))
+    phone = db.Column(db.String(20))
+    experience_years = db.Column(db.Integer, default=0)
+    skills = db.Column(db.Text)  # JSON array
+    resume_filename = db.Column(db.String(255))
+    
+    # Password reset
+    reset_token = db.Column(db.String(100), unique=True)
+    reset_token_expiry = db.Column(db.DateTime)
+    
+    # Relationships
+    interviews = db.relationship('InterviewSession', backref='user')
+```
+
+### InterviewSession Model
+
+```python
+class InterviewSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    session_type = db.Column(db.String(50))  # 'live', 'mock', 'hr', etc.
+    
+    questions = db.Column(db.Text)  # JSON array
+    score = db.Column(db.Float)
+    feedback = db.Column(db.Text)
+    duration = db.Column(db.Integer)  # seconds
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime)
+    
+    speech_metrics = db.Column(db.Text)  # JSON with WPM, pitch, pauses
+```
+
+### UserMastery Model
+
+**Location:** `models.py:62-100`
+
+**Purpose:** Tracks user's topic-level mastery with concept-level granularity
+
+```python
+class UserMastery(db.Model):
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    topic = db.Column(db.String(50))  # 'React', 'Python', 'System Design'
+    
+    # Mastery metrics (0-1)
+    mastery_level = db.Column(db.Float, default=0.0)
+    semantic_avg = db.Column(db.Float, default=0.0)
+    keyword_avg = db.Column(db.Float, default=0.0)
+    
+    # Statistics
+    questions_attempted = db.Column(db.Integer, default=0)
+    correct_count = db.Column(db.Integer, default=0)
+    avg_response_time = db.Column(db.Float, default=0.0)
+    
+    # Learning velocity
+    mastery_velocity = db.Column(db.Float, default=0.0)
+    
+    # Difficulty tracking
+    current_difficulty = db.Column(db.String(20), default="medium")
+    consecutive_good = db.Column(db.Integer, default=0)
+    consecutive_poor = db.Column(db.Integer, default=0)
+    
+    # Complete concept-level data (NEW)
+    concept_masteries = db.Column(db.Text, default='{}')  # JSON
+```
+
+### StudyActionPlan Model
+
+```python
+class StudyActionPlan(db.Model):
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    topic = db.Column(db.String(50))
+    plan_data = db.Column(db.Text)  # JSON with recommendations
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+```
+
+## AI Engines
+
+### 1. rag.py - RAG Pipeline
+
+**Size:** 27KB | **Purpose:** Retrieval-Augmented Generation for context-aware questions
+
+**Key Functions:**
+
+#### `generate_rag_question()`
+
+```python
+def generate_rag_question(user_id, topic, resume_context=None):
+    """
+    Generates interview question using:
+    1. User's resume (FAISS vector search)
+    2. Topic context
+    3. Mistral LLM
+    """
+    # Retrieve relevant resume sections
+    resume_chunks = search_resume_faiss(user_id, topic)
+    
+    # Build prompt with context
+    prompt = f"""
+    Generate a {topic} interview question for a candidate with:
+    {resume_chunks}
+    """
+    
+    # Call Mistral API
+    response = mistral_client.chat(
+        model="mistral-large-latest",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    
+    return response.choices[0].message.content
+```
+
+#### `evaluate_answer_with_rag()`
+
+```python
+def evaluate_answer_with_rag(question, answer, topic):
+    """
+    Evaluates user answer using:
+    - Semantic similarity (Sentence Transformers)
+    - Keyword coverage
+    - Mistral qualitative analysis
+    """
+    # Vector similarity
+    similarity_score = calculate_semantic_similarity(answer, ideal_answer)
+    
+    # Keyword extraction
+    keywords = extract_keywords(topic)
+    coverage = calculate_keyword_coverage(answer, keywords)
+    
+    # LLM evaluation
+    feedback = mistral_evaluate(question, answer, topic)
+    
+    return {
+        'similarity': similarity_score,
+        'keyword_coverage': coverage,
+        'feedback': feedback
+    }
+```
+
+### 2. interview_analyzer.py - Signal Processing
+
+**Size:** 51KB | **Purpose:** Research-grade audio and speech analysis
+
+**Key Components:**
+
+#### Voice Activity Detector
+
+```python
+class VoiceActivityDetector:
+    def __init__(self, threshold_db=-30):
+        self.threshold_db = threshold_db
+        
+    def is_speech(self, audio_chunk):
+        rms = np.sqrt(np.mean(audio_chunk**2))
+        db = 20 * np.log10(rms + 1e-10)
+        return db > self.threshold_db
+```
+
+#### Fast Chunk Analysis
+
+```python
+def analyze_audio_chunk_fast(audio_chunk, sample_rate=16000):
+    """
+    Real-time analysis executed in < 5ms
+    """
+    # RMS volume
+    rms = np.sqrt(np.mean(audio_chunk**2))
+    
+    # Pitch detection (YIN algorithm)
+    f0 = librosa.yin(
+        audio_chunk,
+        fmin=80,
+        fmax=400,
+        sr=sample_rate
+    )
+    
+    return {
+        'volume': rms,
+        'pitch': np.median(f0[f0 > 0]) if len(f0[f0 > 0]) > 0 else 0,
+        'timestamp': time.time()
+    }
+```
+
+#### Running Statistics Class
+
+```python
+class RunningStatistics:
+    """Welford's algorithm for streaming statistics"""
+    def __init__(self):
+        self.count = 0
+        self.mean = 0.0
+        self.M2 = 0.0
+        
+    def update(self, value):
+        self.count += 1
+        delta = value - self.mean
+        self.mean += delta / self.count
+        self.M2 += delta * (value - self.mean)
+        
+    def variance(self):
+        return self.M2 / self.count if self.count > 1 else 0.0
+        
+    def std_dev(self):
+        return np.sqrt(self.variance())
+```
+
+#### Semantic Similarity
+
+```python
+def calculate_semantic_similarity(text1, text2):
+    from sentence_transformers import SentenceTransformer
+    from sklearn.metrics.pairwise import cosine_similarity
+    
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    
+    emb1 = model.encode([text1])
+    emb2 = model.encode([text2])
+    
+    return cosine_similarity(emb1, emb2)[0][0]
+```
+
+### 3. mock_interview_engine.py
+
+**Size:** 21KB | **Purpose:** Mock interview question generation
+
+**Key Function:**
+
+```python
+def generate_mock_questions(topic, difficulty="medium", count=5):
+    """
+    Generates mock interview questions using Mistral
+    """
+    prompt = f"""
+    Generate {count} {difficulty} {topic} interview questions.
+    Return as JSON array.
+    """
+    
+    response = mistral_client.chat(
+        model="mistral-large-latest",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    
+    return json.loads(response.choices[0].message.content)
+```
+
+### 4. coding_engine.py
+
+**Size:** 6KB | **Purpose:** Coding problem generation and evaluation
+
+```python
+def generate_coding_problem(difficulty="medium", topic="algorithms"):
+    prompt = f"""
+    Generate a {difficulty} coding problem about {topic}.
+    Include:
+    - Problem statement
+    - Input/output examples
+    - Constraints
+    - Test cases
+    """
+    # ... Mistral API call
+```
+
+## Agent System
+
+The agent system implements **adaptive learning** by tracking user performance and adjusting question difficulty.
+
+### adaptive_controller.py
+
+**Size:** 40KB | **Purpose:** Main orchestration agent
+
+**Key Methods:**
+
+```python
+class AdaptiveInterviewController:
+    def __init__(self):
+        self.analyzer = AdaptiveAnalyzer()
+        self.planner = AdaptivePlanner()
+        self.question_bank = AdaptiveQuestionBank()
+        
+    def select_next_question(self, user_id, topic):
+        # Get user mastery state
+        mastery = UserMastery.query.filter_by(
+            user_id=user_id,
+            topic=topic
+        ).first()
+        
+        # Decide difficulty
+        difficulty = self._determine_difficulty(mastery)
+        
+        # Select concept to test
+        concept = self._select_weak_concept(mastery)
+        
+        # Generate question
+        return self.question_bank.get_question(
+            topic=topic,
+            concept=concept,
+            difficulty=difficulty
+        )
+```
+
+### adaptive_analyzer.py
+
+**Size:** 24KB | **Purpose:** Analyzes answer quality
+
+```python
+class AdaptiveAnalyzer:
+    def analyze_answer(self, question, answer, ideal_answer):
+        # Semantic similarity
+        semantic_score = calculate_semantic_similarity(
+            answer, ideal_answer
+        )
+        
+        # Keyword coverage
+        keywords = extract_keywords(question)
+        keyword_score = calculate_keyword_coverage(answer, keywords)
+        
+        # Combined score
+        return {
+            'semantic': semantic_score,
+            'keyword': keyword_score,
+            'overall': 0.6 * semantic_score + 0.4 * keyword_score
+        }
+```
+
+### adaptive_question_bank.py
+
+**Size:** 63KB | **Purpose:** Stores 500+ questions across topics/difficulties
+
+```python
+QUESTION_BANK = {
+    'React': {
+        'easy': [
+            {'concept': 'useState', 'question': '...', 'ideal_answer': '...'},
+            # ...
+        ],
+        'medium': [...],
+        'hard': [...]
+    },
+    'Python': {...},
+    'System Design': {...}
+}
+```
+
+### subtopic_tracker.py
+
+**Size:** 20KB | **Purpose:** Tracks concept-level mastery
+
+```python
+class SubtopicTracker:
+    def update_mastery(self, user_id, topic, concept, score):
+        # Exponential moving average
+        old_mastery = self.get_concept_mastery(user_id, topic, concept)
+        new_mastery = 0.7 * old_mastery + 0.3 * score
+        
+        # Store in database
+        self.save_concept_mastery(user_id, topic, concept, new_mastery)
+```
+
+## External Services
+
+### assemblyai_websocket_stream.py
+
+**Size:** 15KB
+
+```python
+class AssemblyAIWebSocketStreamer:
+    def __init__(self, on_partial, on_final, on_error=None):
+        self.ws = None
+        self.on_partial = on_partial  # Callback for partial transcripts
+        self.on_final = on_final      # Callback for final transcript
+        
+    def start(self):
+        # Connect to AssemblyAI WebSocket
+        self.ws = websocket.WebSocketApp(
+            "wss://api.assemblyai.com/v2/realtime/ws",
+            on_message=self._on_message,
+            on_error=self._on_error
+        )
+        
+    def send_audio(self, audio_bytes):
+        # Send PCM audio chunk
+        self.ws.send(audio_bytes, opcode=websocket.ABNF.OPCODE_BINARY)
+```
+
+### resume_processor.py
+
+**Size:** 6KB
+
+```python
+def process_resume_for_faiss(user_id, resume_path):
+    # Extract text from PDF/DOCX
+    text = extract_text(resume_path)
+    
+    # Chunk into sections
+    chunks = chunk_text(text, chunk_size=200)
+    
+    # Vectorize with Sentence Transformers
+    embeddings = sentence_model.encode(chunks)
+    
+    # Create FAISS index
+    index = faiss.IndexFlatL2(384)  # 384 = embedding dimension
+    index.add(embeddings)
+    
+    # Save to disk
+    faiss.write_index(index, f"data/processed/{user_id}_resume.index")
+```
+
+## API Routes Organization
+
+### Authentication Routes
+
+```python
+@app.route('/api/signup', methods=['POST'])
+def signup():
+    # User registration
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    # Session-based login
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    # Logout
+```
+
+### Interview Routes
+
+```python
+@app.route('/api/start-mock-interview', methods=['POST'])
+def start_mock_interview():
+    # Generates mock questions
+
+@app.route('/api/submit-answer', methods=['POST'])
+def submit_answer():
+    # Evaluates user answer
+
+@app.route('/api/interview-history', methods=['GET'])
+def get_interview_history():
+    # Returns past sessions
+```
+
+### Resume Routes
+
+```python
+@app.route('/api/upload-resume', methods=['POST'])
+def upload_resume():
+    # Processes and vectorizes resume
+
+@app.route('/api/gap-analysis', methods=['POST'])
+def gap_analysis():
+    # Compares resume to job description
+```
+
+### WebSocket Events
+
+```python
+@socketio.on('connect')
+def handle_connect():
+    print(f"Client connected: {request.sid}")
+
+@socketio.on('start_interview')
+def handle_start_interview(data):
+    user_id = data['user_id']
+    # Initialize AssemblyAI streamer
+
+@socketio.on('audio_chunk')
+def handle_audio_chunk(audio_data):
+    # Fork into signal + semantic streams
+    
+    # Stream A: Signal processing
+    metrics = analyze_audio_chunk_fast(audio_data)
+    
+    # Stream B: Transcription
+    assemblyai_streamer.send_audio(audio_data)
+
+@socketio.on('stop_interview')
+def handle_stop_interview():
+    # Finalize and generate report
+```
+
+## Configuration (config.py)
+
+```python
+class Config:
+    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///instance/interview_prep.db'
+    
+    # API Keys
+    MISTRAL_API_KEY = os.getenv('MISTRAL_API_KEY')
+    ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY')
+    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+    
+    # Paths
+    UPLOAD_FOLDER = 'uploads/'
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
+```
+
+## Performance Optimizations
+
+1. **FAISS Indexing:** O(log n) vector search instead of O(n) linear scan
+2. **Welford's Algorithm:** O(1) memory for running statistics
+3. **YIN Pitch Detection:** Optimized for real-time processing
+4. **Database Indexing:** Composite indexes on `(user_id, topic)`
+5. **WebSocket Pooling:** One connection per user session
+
+## Next Steps
+
+<Card title="Frontend Structure" icon="react" href="/technical/frontend-structure">
+  Explore the React application architecture
+</Card>

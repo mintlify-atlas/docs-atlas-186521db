@@ -1,0 +1,649 @@
+---
+title: Adding New Features
+description: Guidelines and best practices for extending the CS Interview Assistant with new functionality
+---
+
+This guide provides patterns and conventions for adding new features to the CS Interview Assistant. Follow these guidelines to maintain code quality and consistency.
+
+## Code Style and Conventions
+
+### Python (Backend)
+
+- **PEP 8 Compliance**: Follow Python's PEP 8 style guide
+- **Type Hints**: Use type hints for function parameters and return values
+- **Docstrings**: Document all modules, classes, and functions
+- **Imports**: Group imports (standard library, third-party, local)
+
+**Example:**
+```python
+"""Module description."""
+import os
+import json
+from typing import List, Dict, Optional
+
+from flask import jsonify, request
+from sentence_transformers import SentenceTransformer
+
+from models import User, InterviewSession
+from rag import mistral_generate
+
+def generate_questions(
+    topic: str, 
+    difficulty: str = "medium", 
+    count: int = 5
+) -> List[Dict]:
+    """
+    Generate interview questions for a specific topic.
+    
+    Args:
+        topic: The subject area (OS, DBMS, OOP)
+        difficulty: Question difficulty level
+        count: Number of questions to generate
+    
+    Returns:
+        List of question dictionaries with metadata
+    """
+    # Implementation
+    pass
+```
+
+### JavaScript/React (Frontend)
+
+- **Functional Components**: Use functional components with hooks
+- **Component Structure**: Props, state, effects, handlers, render
+- **Naming**: PascalCase for components, camelCase for functions/variables
+- **File Organization**: One component per file
+
+**Example:**
+```javascript
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import './QuestionCard.css';
+
+function QuestionCard({ question, onAnswer }) {
+  const [answer, setAnswer] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    // Component mount logic
+  }, []);
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      const response = await axios.post('/api/interview/submit', {
+        question: question.id,
+        answer: answer
+      });
+      onAnswer(response.data);
+    } catch (error) {
+      console.error('Submission failed:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="question-card">
+      <h3>{question.text}</h3>
+      <textarea 
+        value={answer} 
+        onChange={(e) => setAnswer(e.target.value)}
+        placeholder="Enter your answer..."
+      />
+      <button onClick={handleSubmit} disabled={isSubmitting}>
+        {isSubmitting ? 'Submitting...' : 'Submit Answer'}
+      </button>
+    </div>
+  );
+}
+
+export default QuestionCard;
+```
+
+## Adding New Interview Types
+
+To add a new interview mode (e.g., System Design, Behavioral):
+
+<Steps>
+  <Step title="Create Backend Engine">
+    Create a new file in `backend/` for your interview logic:
+    
+    ```python
+    # backend/system_design_engine.py
+    """System design interview engine using Mistral AI."""
+    
+    from rag import mistral_generate
+    import json
+    
+    def generate_system_design_questions(difficulty="medium", count=3):
+        """Generate system design interview questions."""
+        prompt = f"""Generate {count} system design questions 
+        at {difficulty} difficulty level..."""
+        
+        response = mistral_generate(prompt)
+        return json.loads(response)
+    
+    def evaluate_design_answer(question, answer, user_level):
+        """Evaluate system design answer."""
+        prompt = f"""Evaluate this system design answer:
+        Question: {question}
+        Answer: {answer}
+        User Level: {user_level}
+        
+        Provide detailed feedback on:
+        - Scalability considerations
+        - Component choices
+        - Trade-offs identified
+        - Missing elements
+        """
+        
+        return mistral_generate(prompt)
+    ```
+  </Step>
+
+  <Step title="Add API Endpoints">
+    In `backend/app.py`, add routes for your new interview type:
+    
+    ```python
+    from system_design_engine import (
+        generate_system_design_questions,
+        evaluate_design_answer
+    )
+    
+    @app.route('/api/interview/system-design/generate', methods=['POST'])
+    def api_generate_system_design():
+        data = request.json
+        difficulty = data.get('difficulty', 'medium')
+        count = data.get('count', 3)
+        
+        questions = generate_system_design_questions(
+            difficulty=difficulty,
+            count=count
+        )
+        
+        return jsonify({
+            'success': True,
+            'questions': questions
+        })
+    
+    @app.route('/api/interview/system-design/evaluate', methods=['POST'])
+    def api_evaluate_system_design():
+        data = request.json
+        question = data.get('question')
+        answer = data.get('answer')
+        user_level = data.get('user_level', 'intermediate')
+        
+        feedback = evaluate_design_answer(question, answer, user_level)
+        
+        return jsonify({
+            'success': True,
+            'feedback': feedback
+        })
+    ```
+  </Step>
+
+  <Step title="Create Frontend Component">
+    Create a new component in `frontend/src/components/`:
+    
+    ```javascript
+    // frontend/src/components/SystemDesign/SystemDesign.js
+    import React, { useState, useEffect } from 'react';
+    import axios from 'axios';
+    import './SystemDesign.css';
+    
+    function SystemDesign() {
+      const [questions, setQuestions] = useState([]);
+      const [currentIndex, setCurrentIndex] = useState(0);
+      const [answer, setAnswer] = useState('');
+      const [feedback, setFeedback] = useState(null);
+    
+      useEffect(() => {
+        loadQuestions();
+      }, []);
+    
+      const loadQuestions = async () => {
+        try {
+          const response = await axios.post(
+            '/api/interview/system-design/generate',
+            { difficulty: 'medium', count: 3 }
+          );
+          setQuestions(response.data.questions);
+        } catch (error) {
+          console.error('Failed to load questions:', error);
+        }
+      };
+    
+      const handleSubmit = async () => {
+        try {
+          const response = await axios.post(
+            '/api/interview/system-design/evaluate',
+            {
+              question: questions[currentIndex],
+              answer: answer,
+              user_level: 'intermediate'
+            }
+          );
+          setFeedback(response.data.feedback);
+        } catch (error) {
+          console.error('Evaluation failed:', error);
+        }
+      };
+    
+      return (
+        <div className="system-design-container">
+          {/* Component JSX */}
+        </div>
+      );
+    }
+    
+    export default SystemDesign;
+    ```
+  </Step>
+
+  <Step title="Add Route">
+    Update `frontend/src/App.js` to include your new route:
+    
+    ```javascript
+    import SystemDesign from './components/SystemDesign/SystemDesign';
+    
+    // In the Routes section:
+    <Route path="/system-design" element={<SystemDesign />} />
+    ```
+  </Step>
+
+  <Step title="Update Navigation">
+    Add a link in the Dashboard or Sidebar component to access the new interview type.
+  </Step>
+</Steps>
+
+## Adding New AI Models or Engines
+
+The system uses Mistral AI by default. To add support for other models:
+
+### Option 1: Add Alternative LLM Provider
+
+```python
+# backend/llm_provider.py
+import os
+from mistralai import Mistral
+from openai import OpenAI
+
+class LLMProvider:
+    """Unified interface for multiple LLM providers."""
+    
+    def __init__(self, provider='mistral'):
+        self.provider = provider
+        
+        if provider == 'mistral':
+            self.client = Mistral(api_key=os.getenv('MISTRAL_API_KEY'))
+            self.model = 'mistral-large-latest'
+        elif provider == 'openai':
+            self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            self.model = 'gpt-4'
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
+    
+    def generate(self, prompt, system_prompt=None):
+        """Generate text using the configured provider."""
+        if self.provider == 'mistral':
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+            
+            response = self.client.chat.complete(
+                model=self.model,
+                messages=messages
+            )
+            return response.choices[0].message.content
+            
+        elif self.provider == 'openai':
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+            
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages
+            )
+            return response.choices[0].message.content
+
+# Usage:
+llm = LLMProvider(provider='openai')  # or 'mistral'
+response = llm.generate("What is a binary search tree?")
+```
+
+### Option 2: Use Local Models with Ollama
+
+The codebase previously supported Ollama. To re-enable:
+
+1. Install Ollama locally
+2. Pull a model: `ollama pull llama2`
+3. Update `backend/config.py` to use Ollama endpoint
+4. Modify `rag.py` to use local model instead of Mistral API
+
+## Extending the Knowledge Base
+
+To add new topics or domains:
+
+<Steps>
+  <Step title="Prepare Raw Data">
+    Create a JSON file in `data/raw/` with your Q&A pairs:
+    
+    ```json
+    [
+      {
+        "id": 1,
+        "question": "What is a compiler?",
+        "answer": "A compiler is a program that translates high-level source code into machine code or intermediate code..."
+      },
+      {
+        "id": 2,
+        "question": "Explain lexical analysis",
+        "answer": "Lexical analysis is the first phase of compilation where the source code is scanned..."
+      }
+    ]
+    ```
+  </Step>
+
+  <Step title="Update Taxonomy">
+    Add your new topic to `config/taxonomy.json`:
+    
+    ```json
+    {
+      "Compiler Design": {
+        "subtopics": [
+          "Lexical Analysis",
+          "Syntax Analysis",
+          "Semantic Analysis",
+          "Code Generation",
+          "Optimization"
+        ]
+      },
+      "Operating Systems": { ... },
+      "DBMS": { ... }
+    }
+    ```
+  </Step>
+
+  <Step title="Add Topic Rules">
+    Define keywords in `config/topic_rules.json`:
+    
+    ```json
+    [
+      {
+        "keywords": ["compiler", "lexer", "parser", "code generation"],
+        "topic": "Compiler Design",
+        "subtopic": "General"
+      },
+      {
+        "keywords": ["token", "lexeme", "lexical"],
+        "topic": "Compiler Design",
+        "subtopic": "Lexical Analysis"
+      }
+    ]
+    ```
+  </Step>
+
+  <Step title="Update Domain Restrictions">
+    In `backend/rag.py`, update the allowed topics:
+    
+    ```python
+    ALLOWED_TOPICS = {
+        "Operating Systems", 
+        "DBMS", 
+        "OOP", 
+        "Compiler Design"  # Add new topic
+    }
+    
+    TOPIC_ALIASES = {
+        # ... existing aliases
+        "Compiler": "Compiler Design",
+        "Compilers": "Compiler Design",
+    }
+    ```
+  </Step>
+
+  <Step title="Rebuild Index">
+    Process the new data and rebuild the FAISS index:
+    
+    ```bash
+    python scripts/prepare_kb.py
+    python scripts/reindex_mistral.py
+    ```
+  </Step>
+</Steps>
+
+## Adding New API Endpoints
+
+Follow this pattern when adding new endpoints:
+
+```python
+# backend/app.py
+
+@app.route('/api/resource/action', methods=['POST'])
+def api_resource_action():
+    """
+    Endpoint description.
+    
+    Request Body:
+        - param1 (str): Description
+        - param2 (int, optional): Description
+    
+    Returns:
+        JSON response with success status and data
+    """
+    try:
+        # 1. Validate request
+        if not request.json:
+            return jsonify({
+                'success': False,
+                'error': 'No data provided'
+            }), 400
+        
+        # 2. Extract parameters
+        data = request.json
+        param1 = data.get('param1')
+        param2 = data.get('param2', default_value)
+        
+        # 3. Validate required parameters
+        if not param1:
+            return jsonify({
+                'success': False,
+                'error': 'param1 is required'
+            }), 400
+        
+        # 4. Business logic
+        result = perform_action(param1, param2)
+        
+        # 5. Return response
+        return jsonify({
+            'success': True,
+            'data': result
+        })
+        
+    except Exception as e:
+        print(f"Error in api_resource_action: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+```
+
+**Frontend API Call:**
+
+```javascript
+const callNewEndpoint = async (param1, param2) => {
+  try {
+    const response = await axios.post('/api/resource/action', {
+      param1: param1,
+      param2: param2
+    });
+    
+    if (response.data.success) {
+      return response.data.data;
+    } else {
+      throw new Error(response.data.error);
+    }
+  } catch (error) {
+    console.error('API call failed:', error);
+    throw error;
+  }
+};
+```
+
+## Frontend Component Patterns
+
+### Component Structure
+
+```javascript
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import './ComponentName.css';
+
+function ComponentName({ prop1, prop2, onAction }) {
+  // 1. State declarations
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // 2. Effects
+  useEffect(() => {
+    fetchData();
+  }, [prop1]); // Dependencies
+
+  // 3. Event handlers
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await axios.get('/api/data');
+      setData(response.data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAction = () => {
+    // Handle user action
+    onAction?.(data);
+  };
+
+  // 4. Conditional rendering
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error}</div>;
+  if (!data) return null;
+
+  // 5. Main render
+  return (
+    <div className="component-name">
+      {/* Component JSX */}
+    </div>
+  );
+}
+
+export default ComponentName;
+```
+
+## Testing New Features
+
+### Backend Testing
+
+Create test files alongside your modules:
+
+```python
+# backend/test_my_feature.py
+import unittest
+from my_feature import my_function
+
+class TestMyFeature(unittest.TestCase):
+    def test_basic_functionality(self):
+        result = my_function('input')
+        self.assertEqual(result, 'expected_output')
+    
+    def test_edge_case(self):
+        result = my_function('')
+        self.assertIsNone(result)
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+### Frontend Testing
+
+Update `frontend/src/App.test.js` or create component-specific tests:
+
+```javascript
+import { render, screen, fireEvent } from '@testing-library/react';
+import MyComponent from './MyComponent';
+
+test('renders component correctly', () => {
+  render(<MyComponent />);
+  const element = screen.getByText(/expected text/i);
+  expect(element).toBeInTheDocument();
+});
+
+test('handles user interaction', () => {
+  const handleClick = jest.fn();
+  render(<MyComponent onClick={handleClick} />);
+  
+  const button = screen.getByRole('button');
+  fireEvent.click(button);
+  
+  expect(handleClick).toHaveBeenCalledTimes(1);
+});
+```
+
+## Pull Request Process
+
+When contributing new features:
+
+1. **Create a Feature Branch**: `git checkout -b feature/my-new-feature`
+2. **Make Incremental Commits**: Write clear, descriptive commit messages
+3. **Test Thoroughly**: Verify both frontend and backend functionality
+4. **Update Documentation**: Add comments and update relevant docs
+5. **Create Pull Request**: Include:
+   - Clear description of the feature
+   - Screenshots/demo if UI changes
+   - Testing steps
+   - Any breaking changes
+
+**Commit Message Format:**
+```
+feat: Add system design interview mode
+
+- Created SystemDesignEngine with question generation
+- Added frontend component with canvas for diagrams
+- Integrated evaluation with Mistral AI
+- Updated navigation to include new mode
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Error Handling" icon="triangle-exclamation">
+    Always wrap async operations in try-catch blocks and provide meaningful error messages to users.
+  </Card>
+  
+  <Card title="State Management" icon="database">
+    Keep state as close to where it's used as possible. Use context or props for shared state.
+  </Card>
+  
+  <Card title="API Design" icon="plug">
+    Follow RESTful conventions. Use consistent response formats across all endpoints.
+  </Card>
+  
+  <Card title="Security" icon="shield">
+    Never expose API keys in frontend code. Always validate user input on the backend.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+- Review the [Project Structure](/development/project-structure) for file locations
+- Check the [API Authentication](/api/authentication) and [Interview Endpoints](/api/interview-endpoints) for existing endpoints
+- Explore existing components for patterns and examples

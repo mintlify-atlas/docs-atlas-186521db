@@ -1,0 +1,421 @@
+---
+title: Technical Q&A
+description: Query an extensive knowledge base of Computer Science topics with RAG-powered answers
+---
+
+## Overview
+
+The Technical Q&A feature provides instant, accurate answers to Computer Science questions using a Retrieval-Augmented Generation (RAG) system. Ask questions about DBMS, Object-Oriented Programming, or Operating Systems and receive detailed explanations backed by a curated knowledge base.
+
+## Supported Topics
+
+The platform covers three core Computer Science domains:
+
+### 1. Database Management Systems (DBMS)
+**15 Subtopics** including:
+- ACID Properties
+- Normalization (1NF through BCNF)
+- SQL Queries and Joins
+- Transactions and Concurrency Control
+- Indexing Strategies
+- Database Design
+- Query Optimization
+- NoSQL vs SQL
+- Distributed Databases
+
+### 2. Object-Oriented Programming (OOP)
+**8 Subtopics** including:
+- Classes and Objects
+- Inheritance and Polymorphism
+- Encapsulation and Abstraction
+- SOLID Principles
+- Design Patterns
+- Interfaces and Abstract Classes
+- Method Overloading vs Overriding
+- Composition vs Inheritance
+
+### 3. Operating Systems (OS)
+**10 Subtopics** including:
+- Process Management
+- Memory Management
+- Synchronization (Mutex, Semaphore, Deadlock)
+- File Systems
+- CPU Scheduling Algorithms
+- Virtual Memory and Paging
+- I/O Management
+- System Calls
+- Networking
+- Security
+
+<Note>
+The knowledge base contains **300+ curated Q&A pairs** across all domains, with each answer verified for technical accuracy.
+</Note>
+
+## How to Use Technical Q&A
+
+<Steps>
+  <Step title="Navigate to Q&A Section">
+    Access the Technical Q&A feature from the main navigation menu
+  </Step>
+  
+  <Step title="Enter Your Question">
+    Type your question in natural language. Be specific for best results.
+    
+    **Good**: "What is the difference between mutex and semaphore in OS?"
+    
+    **Too vague**: "Explain locks"
+  </Step>
+  
+  <Step title="Receive AI-Generated Answer">
+    The system retrieves relevant context from the knowledge base and generates a comprehensive answer using Mistral AI
+  </Step>
+  
+  <Step title="Explore Related Concepts">
+    Review suggested follow-up questions to deepen your understanding of the topic
+  </Step>
+</Steps>
+
+## How RAG Works
+
+The system uses **Retrieval-Augmented Generation** to provide accurate, context-aware answers:
+
+### 1. Topic Detection
+
+```python
+# Source: backend/rag.py:132
+get_topic_and_subtopic_from_query(query, topic_rules)
+```
+
+When you ask a question, the system:
+- Analyzes keywords to detect the topic (DBMS, OOP, or OS)
+- Maps to specific subtopic using 200+ keyword rules
+- Enhances query with topic context for better retrieval
+
+**Example:**
+- Your query: "What is deadlock?"
+- Detected: Topic = **Operating Systems**, Subtopic = **Synchronization**
+- Enhanced query: "Question about Synchronization in OS: What is deadlock?"
+
+### 2. Vector Similarity Search
+
+```python
+# Source: backend/rag.py:98
+load_index_and_metas()
+```
+
+The knowledge base is indexed using **FAISS** (Facebook AI Similarity Search):
+
+**Indexing Pipeline:**
+1. Each Q&A pair is split into 500-character chunks with 50-char overlap
+2. Chunks are embedded using `all-MiniLM-L6-v2` (384 dimensions)
+3. Embeddings stored in FAISS IndexFlatIP for fast cosine similarity
+4. Metadata includes topic, subtopic, difficulty, and source text
+
+**Search Process:**
+1. Your question is converted to a 384-dimensional vector
+2. FAISS retrieves top 5 most similar chunks (typically &lt;10ms)
+3. Results include similarity scores and metadata
+4. Out-of-domain queries are filtered based on topic detection
+
+### 3. Answer Generation
+
+Retrieved context is passed to **Mistral Large** for answer generation:
+
+```python
+# Source: backend/rag.py (mistral_generate function)
+mistral_generate(prompt)
+```
+
+**Prompt Structure:**
+```
+You are an expert in [Detected Topic].
+
+Context from knowledge base:
+[Top 5 retrieved chunks]
+
+User question: [Your question]
+
+Provide a detailed, accurate answer...
+```
+
+<Tip>
+The AI is instructed to cite specific concepts from the retrieved context, ensuring answers are grounded in the knowledge base rather than hallucinated.
+</Tip>
+
+## Domain Restriction
+
+The system **only answers questions** in the three allowed domains:
+
+```python
+# Source: backend/rag.py:32
+ALLOWED_TOPICS = {"Operating Systems", "DBMS", "OOP"}
+```
+
+If you ask about topics outside this scope (e.g., machine learning, web development), you'll receive:
+
+> "I can only answer questions related to Operating Systems, DBMS, and Object-Oriented Programming. Please ask a question from one of these domains."
+
+This ensures answer quality remains high and prevents the AI from speculating on topics outside the curated knowledge base.
+
+## Topic Aliases
+
+The system recognizes multiple ways to refer to each topic:
+
+```python
+# Source: backend/rag.py:34
+TOPIC_ALIASES = {
+    "OS": "Operating Systems",
+    "Operating System": "Operating Systems",
+    "os": "Operating Systems",
+    
+    "Database": "DBMS",
+    "Databases": "DBMS",
+    
+    "OOPS": "OOP",
+    "Object Oriented Programming": "OOP"
+}
+```
+
+You can use any variation - the system normalizes to canonical topic names.
+
+## Example Queries
+
+### DBMS Questions
+
+**Query:** "Explain the difference between HAVING and WHERE clauses in SQL"
+
+**System Process:**
+1. Detects Topic: DBMS, Subtopic: SQL Queries
+2. Retrieves 5 chunks about SQL filtering, aggregation, GROUP BY
+3. Generates answer explaining:
+   - WHERE filters rows before grouping
+   - HAVING filters groups after aggregation
+   - Concrete example with GROUP BY, COUNT(), HAVING clauses
+   - Performance implications
+
+### OOP Questions
+
+**Query:** "What are SOLID principles?"
+
+**System Process:**
+1. Detects Topic: OOP, Subtopic: SOLID Principles
+2. Retrieves chunks covering each principle (SRP, OCP, LSP, ISP, DIP)
+3. Generates answer with:
+   - Full name and acronym breakdown
+   - Brief explanation of each principle
+   - Code examples for 2-3 principles
+   - Real-world benefits (maintainability, testability)
+
+### OS Questions
+
+**Query:** "How does virtual memory paging work?"
+
+**System Process:**
+1. Detects Topic: Operating Systems, Subtopic: Memory Management
+2. Retrieves chunks about paging, page tables, TLB, page faults
+3. Generates answer covering:
+   - Page table structure and address translation
+   - TLB (Translation Lookaside Buffer) role
+   - Page fault handling process
+   - Advantages over segmentation
+
+## Knowledge Base Statistics
+
+From the source README:
+
+```python
+# Source: source/README.md:122
+- Total Questions: ~300+
+- DBMS: ~185 questions with 15 subtopics
+- OOPs: ~200 questions with 8 subtopics
+- OS: 100 questions with 10 subtopics
+```
+
+**Difficulty Distribution:**
+- Beginner: Fundamental concepts and definitions
+- Intermediate: Application and comparison questions
+- Advanced: Deep technical details and edge cases
+
+## Behind the Scenes
+
+### Data Processing Pipeline
+
+<Steps>
+  <Step title="Raw Data Ingestion">
+    JSON files with Q&A pairs from `data/raw/` (complete_dbms.json, oops_qna_simplified.json, os_qna.json)
+  </Step>
+  
+  <Step title="Normalization">
+    Text cleaned, normalized (removing special chars, fixing encoding), assigned topics/subtopics via keyword matching
+  </Step>
+  
+  <Step title="Difficulty Assignment">
+    Heuristic analysis based on answer length, technical term density, and complexity
+  </Step>
+  
+  <Step title="Chunking">
+    Text split into 500-char chunks with 50-char overlap using RecursiveCharacterTextSplitter
+  </Step>
+  
+  <Step title="Embedding Generation">
+    Each chunk embedded with SentenceTransformer (all-MiniLM-L6-v2) → 384-dimensional vectors
+  </Step>
+  
+  <Step title="FAISS Indexing">
+    Vectors indexed with FAISS IndexFlatIP for cosine similarity search
+  </Step>
+  
+  <Step title="Metadata Storage">
+    Chunk metadata (topic, subtopic, difficulty, source text) stored in metas.json alongside index
+  </Step>
+</Steps>
+
+### Caching for Performance
+
+The system uses aggressive caching to minimize latency:
+
+```python
+# Source: backend/rag.py:64
+_INDEX_CACHE = None
+_METAS_CACHE = None
+_KB_LOOKUP_CACHE = None
+_EMBEDDER_CACHE = None
+_TOPIC_RULES_CACHE = None
+```
+
+**What's Cached:**
+- FAISS index (loaded once at startup)
+- Metadata for all chunks (1 load)
+- SentenceTransformer model (loaded once)
+- Topic rules (keyword mappings)
+- Knowledge base lookup dictionary
+
+**Performance Impact:**
+- First query: ~2-3 seconds (model loading)
+- Subsequent queries: ~200-500ms (cached models)
+- FAISS search: &lt;10ms for 300+ chunks
+
+## Best Practices
+
+### Writing Effective Queries
+
+<Tip>
+**Do**: "Explain the difference between B-tree and Hash indexes in DBMS"
+
+**Don't**: "indexes"
+</Tip>
+
+**Tips for Best Results:**
+1. **Be specific**: Mention the concept name explicitly
+2. **Include topic context**: If ambiguous, specify "in DBMS" or "in OS"
+3. **Ask one thing**: Break complex multi-part questions into separate queries
+4. **Use technical terms**: "mutex vs semaphore" better than "locking mechanisms"
+
+### Understanding Answer Quality
+
+Answers are **only as good as the retrieved context**:
+- High similarity scores (&gt;0.7) → Very relevant context → Detailed answer
+- Medium scores (0.5-0.7) → Somewhat relevant → General answer
+- Low scores (&lt;0.5) → Poor context → May indicate topic not in KB
+
+If an answer seems off-topic or incomplete, try:
+- Rephrasing with more specific terminology
+- Adding the topic name to your query
+- Breaking complex questions into simpler parts
+
+### Topic Coverage Gaps
+
+While the KB is extensive, some niche topics may have limited coverage:
+- Very new technologies (e.g., recent DBMS features)
+- Specific vendor implementations (e.g., Oracle-specific vs MySQL-specific)
+- Edge cases in advanced topics
+
+For these, the system will provide general answers based on closest available context.
+
+## Technical Architecture
+
+### Model Specifications
+
+**Embedding Model**: `all-MiniLM-L6-v2`
+- Dimensions: 384
+- Max sequence length: 256 tokens
+- Training: Contrastive learning on sentence pairs
+- Speed: ~500 sentences/second on CPU
+
+**Generation Model**: `Mistral Large` (latest)
+- Context window: 128K tokens
+- Temperature: 0.7 (balanced creativity/accuracy)
+- Max tokens: 2048 per response
+
+### Storage
+
+**FAISS Index**: `data/processed/faiss_mistral/index.faiss`
+- Type: IndexFlatIP (Inner Product)
+- Size: ~500KB for 300+ Q&A pairs
+- Search complexity: O(n) for exact search
+
+**Metadata**: `data/processed/faiss_mistral/metas.json`
+- Format: JSON array of chunk objects
+- Fields: id, chunk_id, topic, subtopic, difficulty, text, source
+
+### Query Flow
+
+```
+User Query
+    ↓
+Topic Detection (keyword rules)
+    ↓
+Query Enhancement ("Question about {subtopic} in {topic}: {query}")
+    ↓
+Embed Query (SentenceTransformer)
+    ↓
+FAISS Similarity Search (top 5 chunks)
+    ↓
+Filter by Topic (only allowed topics)
+    ↓
+Prompt Construction (context + query)
+    ↓
+Mistral API Call
+    ↓
+Generated Answer
+```
+
+Total latency: ~200-800ms (after initial model loading)
+
+## Extending the Knowledge Base
+
+To add new topics or expand existing ones:
+
+<Steps>
+  <Step title="Prepare Q&A Data">
+    Create JSON file with format:
+    ```json
+    [
+      {
+        "id": 1,
+        "question": "What is X?",
+        "answer": "X is..."
+      }
+    ]
+    ```
+  </Step>
+  
+  <Step title="Update Topic Rules">
+    Add keyword mappings in `config/topic_rules.json`:
+    ```json
+    {
+      "keywords": ["paging", "virtual memory"],
+      "topic": "OS",
+      "subtopic": "Memory Management"
+    }
+    ```
+  </Step>
+  
+  <Step title="Rebuild Index">
+    Run preprocessing and FAISS indexing scripts to incorporate new data
+  </Step>
+  
+  <Step title="Validate">
+    Test queries to ensure new topics are detected and retrieved correctly
+  </Step>
+</Steps>

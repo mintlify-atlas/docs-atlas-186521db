@@ -1,0 +1,391 @@
+---
+title: Architecture Overview
+description: System architecture, parallel processing, and technology stack of the AI Interview Preparation Platform
+---
+
+## System Architecture
+
+The Interview Preparation Platform is a **hybrid AI application** built as a **Client-Server** architecture that combines static document analysis with real-time audio processing.
+
+### High-Level Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     CLIENT LAYER                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │   React.js Frontend (Port 3000)                      │  │
+│  │   - User Interface                                   │  │
+│  │   - MediaRecorder API (Audio Capture)                │  │
+│  │   - Socket.IO Client (WebSocket)                     │  │
+│  │   - Real-time Transcription Display                  │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                           │
+                           ▼ WebSocket + HTTP
+┌─────────────────────────────────────────────────────────────┐
+│                     SERVER LAYER                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │   Flask Backend (Port 5000)                          │  │
+│  │   - WebSocket Server (Socket.IO)                     │  │
+│  │   - API Routes                                       │  │
+│  │   - Parallel Processing Orchestration                │  │
+│  │   - Database (SQLite)                                │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                           │
+           ┌───────────────┴───────────────┐
+           ▼                               ▼
+┌─────────────────────────┐   ┌─────────────────────────┐
+│   SIGNAL STREAM         │   │   SEMANTIC STREAM       │
+│   (Local Processing)    │   │   (External APIs)       │
+│                         │   │                         │
+│  • NumPy/Librosa        │   │  • AssemblyAI           │
+│  • Pitch Detection      │   │  • Google Gemini        │
+│  • Voice Quality        │   │  • Sentence Transformers│
+│  • Statistical Analysis │   │  • FAISS Vector Search  │
+└─────────────────────────┘   └─────────────────────────┘
+```
+
+## Parallel Processing Architecture
+
+The platform's most innovative feature is its **dual-stream parallel processing** system that analyzes both **how** you speak (signal) and **what** you say (semantic).
+
+### Audio Processing Fork
+
+When audio data arrives from the frontend, the backend splits it into two independent streams:
+
+#### Stream A: Signal Stream (Local Processing)
+
+```python
+# Raw bytes → NumPy array → Immediate analysis
+raw_bytes → np.array → analyze_audio_chunk_fast()
+  ↓
+• RMS Volume Calculation (~1ms)
+• Pitch Detection (YIN Algorithm)
+• Running Statistics Update
+• Real-time WPM Calculation
+```
+
+**Key Characteristics:**
+- **Latency:** < 5ms per chunk
+- **Processing:** Synchronous, local
+- **Output:** Numeric metrics (pitch, volume, pauses)
+- **Location:** `interview_analyzer.py:analyze_audio_chunk_fast()`
+
+#### Stream B: Semantic Stream (External Processing)
+
+```python
+# Same bytes → AssemblyAI → Text → AI Analysis
+raw_bytes → AssemblyAI WebSocket → transcript
+  ↓
+Sentence Transformers → vector embeddings
+  ↓
+FAISS similarity search → semantic score
+  ↓
+Google Gemini → qualitative feedback
+```
+
+**Key Characteristics:**
+- **Latency:** 200-500ms per chunk
+- **Processing:** Asynchronous, external APIs
+- **Output:** Transcribed text, semantic analysis, AI feedback
+- **Location:** `assemblyai_websocket_stream.py`, `rag.py`
+
+### Data Flow Diagram
+
+```
+User Speaks
+    │
+    ▼
+[MediaRecorder API]
+    │
+    ▼
+4096-byte PCM chunks (every ~100ms)
+    │
+    ▼ Socket.IO emit
+[Flask WebSocket Handler]
+    │
+    ├─────────────────────────┬─────────────────────────┐
+    ▼                         ▼                         ▼
+[Signal Analysis]      [AssemblyAI Stream]      [Metrics Update]
+    │                         │                         │
+    ▼                         ▼                         ▼
+Pitch, Volume          Live Transcription      Running Statistics
+    │                         │                         │
+    └─────────────────────────┴─────────────────────────┘
+                              │
+                              ▼
+                    [Final Synthesis]
+                              │
+                              ▼
+                      Google Gemini API
+                              │
+                              ▼
+                    Comprehensive Feedback
+```
+
+## AI Models & Technologies
+
+### 1. Google Gemini (LLM)
+
+**Role:** The Reasoning Engine
+
+**Implementation:**
+- Location: `rag.py`, `app.py`
+- API: Google Generative AI SDK
+
+**Functions:**
+- Generates context-aware interview questions
+- Provides qualitative feedback on answers
+- Synthesizes signal + semantic data into human-readable reports
+- Powers the RAG (Retrieval-Augmented Generation) pipeline
+
+**Example Usage:**
+```python
+# From rag.py
+response = mistral_client.chat(
+    model="mistral-large-latest",
+    messages=[{"role": "user", "content": prompt}]
+)
+```
+
+### 2. Sentence Transformers (all-MiniLM-L6-v2)
+
+**Role:** The Matchmaker
+
+**Implementation:**
+- Location: `interview_analyzer.py`, `resume_processor.py`
+- Model: `sentence-transformers/all-MiniLM-L6-v2`
+
+**Functions:**
+- Converts text (resume, job descriptions, answers) into 384-dimensional vectors
+- Enables semantic similarity calculations
+- Powers the matching between user answers and ideal responses
+
+**Example:**
+```python
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer('all-MiniLM-L6-v2')
+embeddings = model.encode(text)
+similarity = cosine_similarity(answer_vec, ideal_vec)
+```
+
+### 3. Faster-Whisper (Local ASR)
+
+**Role:** Local Speech-to-Text Engine
+
+**Implementation:**
+- Location: `interview_analyzer.py` (`WhisperModelManager`)
+- Model: OpenAI Whisper (optimized)
+
+**Functions:**
+- Provides offline transcription capabilities
+- Fallback when AssemblyAI is unavailable
+- No external API dependency
+
+**Configuration:**
+```python
+class WhisperModelManager:
+    def __init__(self, model_size="base"):
+        self.model = WhisperModel(model_size, device="cpu")
+```
+
+### 4. AssemblyAI
+
+**Role:** Real-time Streaming Transcription
+
+**Implementation:**
+- Location: `assemblyai_websocket_stream.py`
+- Protocol: WebSocket streaming
+
+**Functions:**
+- Low-latency real-time transcription (200-500ms)
+- Streams text back to frontend for live captions
+- Production-grade accuracy
+
+**Flow:**
+```python
+class AssemblyAIWebSocketStreamer:
+    def send_audio(self, audio_bytes):
+        # Send PCM audio to AssemblyAI WebSocket
+        
+    def on_message(self, transcript):
+        # Emit transcript back to frontend
+```
+
+## Signal Processing (Physics Layer)
+
+Unlike standard chatbots, this platform implements **research-grade signal processing** to analyze vocal characteristics.
+
+### Implemented Algorithms
+
+#### 1. YIN Pitch Detection Algorithm
+
+**Purpose:** Track fundamental frequency (F0) of voice
+
+**Implementation:**
+```python
+import librosa
+
+f0 = librosa.yin(
+    audio_data,
+    fmin=80,    # Minimum human voice frequency
+    fmax=400,   # Maximum for pitch tracking
+    sr=16000    # Sample rate
+)
+```
+
+**Output Metrics:**
+- Pitch Stability (coefficient of variation)
+- Pitch Range (max - min)
+- Confidence indicator
+
+#### 2. Welford's Algorithm (Running Statistics)
+
+**Purpose:** Calculate mean/variance on streaming data without storing all samples
+
+**Implementation:**
+```python
+class RunningStatistics:
+    def update(self, value):
+        self.count += 1
+        delta = value - self.mean
+        self.mean += delta / self.count
+        self.M2 += delta * (value - self.mean)
+        
+    def variance(self):
+        return self.M2 / self.count if self.count > 1 else 0.0
+```
+
+**Benefits:**
+- O(1) memory usage
+- Real-time statistics on unlimited audio streams
+- No disk I/O required
+
+#### 3. Voice Quality Metrics
+
+**Shimmer (Amplitude Perturbation):**
+```python
+def calculate_shimmer(audio):
+    # Measures amplitude variations
+    peak_amplitudes = detect_peaks(audio)
+    return std(peak_amplitudes) / mean(peak_amplitudes)
+```
+
+**Jitter (Frequency Perturbation):**
+- Calculated from pitch variations
+- Indicates voice steadiness
+- Correlates with confidence
+
+## Technology Stack
+
+### Backend Stack
+
+| Technology | Version | Purpose |
+|-----------|---------|----------|
+| Python | 3.9+ | Core language |
+| Flask | 2.x | Web framework |
+| Flask-SocketIO | 5.x | WebSocket server |
+| SQLAlchemy | 1.4+ | ORM |
+| SQLite | 3.x | Database |
+| NumPy | 1.24+ | Numerical computing |
+| Librosa | 0.10+ | Audio analysis |
+| FAISS | 1.7+ | Vector similarity search |
+| Sentence-Transformers | 2.2+ | Text embeddings |
+| Faster-Whisper | 0.9+ | Local ASR |
+| AssemblyAI SDK | 0.17+ | Streaming ASR |
+| Google Generative AI | 0.3+ | LLM integration |
+
+### Frontend Stack
+
+| Technology | Version | Purpose |
+|-----------|---------|----------|
+| React | 19.2.0 | UI framework |
+| React Router | 7.9.4 | Client-side routing |
+| Socket.IO Client | 4.8.3 | WebSocket client |
+| Axios | 1.12.2 | HTTP client |
+| Three.js | 0.183.1 | 3D graphics (avatars) |
+| @react-three/fiber | 9.5.0 | React Three.js renderer |
+| Lucide React | 0.575.0 | Icon library |
+| React Markdown | 10.1.0 | Markdown rendering |
+
+### Audio Capture Technology
+
+**MediaRecorder API:**
+```javascript
+const mediaRecorder = new MediaRecorder(stream, {
+  mimeType: 'audio/webm',
+  audioBitsPerSecond: 16000
+});
+
+mediaRecorder.ondataavailable = (event) => {
+  socket.emit('audio_chunk', event.data);
+};
+```
+
+**PCM Audio Format:**
+- Sample Rate: 16kHz
+- Bit Depth: 16-bit
+- Channels: Mono
+- Chunk Size: 4096 bytes
+- Frequency: ~100ms intervals
+
+## Database Architecture
+
+**Database:** SQLite (with potential PostgreSQL migration path)
+
+**Key Tables:**
+- `user` - User accounts and profiles
+- `interview_session` - Interview history and results
+- `user_mastery` - Topic-level skill tracking
+- `subtopic_mastery` - Concept-level mastery data
+- `question_history` - Question-answer pairs
+- `study_action_plan` - Personalized study recommendations
+
+**Storage Locations:**
+- Database: `/instance/interview_prep.db`
+- Uploads (resumes): `/uploads/`
+- Processed data: `/data/processed/`
+
+## Deployment Architecture
+
+**Development:**
+```
+Frontend: localhost:3000 (React Dev Server)
+Backend:  localhost:5000 (Flask)
+WebSocket: ws://localhost:5000/socket.io
+```
+
+**Production Considerations:**
+- CORS configured for cross-origin requests
+- WebSocket requires sticky sessions
+- Database migrations via SQLAlchemy
+- Environment variables for API keys
+- Audio processing requires sufficient CPU
+- FAISS indices stored on disk
+
+## Performance Characteristics
+
+**Latency Targets:**
+- Signal Processing: < 5ms per chunk
+- Transcription (AssemblyAI): 200-500ms
+- Vector Search (FAISS): < 10ms
+- LLM Response (Gemini): 1-3 seconds
+
+**Scalability:**
+- Single-server supports ~10 concurrent interviews
+- Database handles 1000+ user profiles
+- FAISS indices scale to 100K+ documents
+- WebSocket connections pooled per user
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Backend Structure" icon="server" href="/technical/backend-structure">
+    Deep dive into Flask modules and API routes
+  </Card>
+  <Card title="Frontend Structure" icon="react" href="/technical/frontend-structure">
+    React components and state management
+  </Card>
+</CardGroup>

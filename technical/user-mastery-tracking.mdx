@@ -1,0 +1,662 @@
+---
+title: 'User Mastery Tracking'
+description: 'Deep dive into the UserMastery model, concept-level tracking, adaptive difficulty, and learning velocity calculations'
+---
+
+## Overview
+
+The **UserMastery** model is the core of the adaptive learning system. It tracks user performance at multiple levels:
+
+1. **Topic-level mastery** - Overall proficiency in a topic (e.g., "DBMS")
+2. **Concept-level mastery** - Fine-grained tracking of individual concepts within topics
+3. **Learning velocity** - Rate of improvement over time
+4. **Adaptive difficulty** - Dynamic adjustment based on performance
+
+## Architecture
+
+### Data Storage Strategy
+
+The system uses a **hybrid storage approach**:
+
+- **Relational fields** for aggregated metrics (fast queries)
+- **JSON fields** for detailed concept-level data (flexible schema)
+
+```python
+class UserMastery(db.Model):
+    # Aggregated metrics (indexed, queryable)
+    mastery_level = db.Column(db.Float, default=0.0)
+    semantic_avg = db.Column(db.Float, default=0.0)
+    
+    # Detailed concept data (JSON)
+    concept_masteries = db.Column(db.Text, default='{}')
+```
+
+This design enables:
+- **Fast topic-level queries** ("What's my DBMS mastery?")
+- **Detailed concept analysis** ("Which ACID properties am I weak on?")
+- **Efficient API responses** (minimal joins required)
+
+---
+
+## Mastery Score Fields
+
+### Primary Mastery Metrics
+
+#### mastery_level (Float, 0-1)
+
+The **overall mastery score** for a topic, calculated as a weighted combination:
+
+```python
+mastery_level = (semantic_avg * 0.7) + (keyword_avg * 0.3)
+```
+
+**Interpretation:**
+- `< 0.3` - Beginner level
+- `0.3 - 0.7` - Intermediate level
+- `> 0.7` - Advanced level
+
+**Updated:** After every question answer
+
+#### semantic_avg (Float, 0-1)
+
+Exponential Moving Average (EMA) of **semantic similarity scores** between user answers and expected answers.
+
+```python
+alpha = 0.3  # Smoothing factor
+semantic_avg = (alpha * new_semantic_score) + ((1 - alpha) * semantic_avg)
+```
+
+**Measures:** Deep understanding and conceptual accuracy
+
+**Calculation:** Uses embedding-based similarity (cosine similarity of sentence embeddings)
+
+#### keyword_avg (Float, 0-1)
+
+Exponential Moving Average (EMA) of **keyword coverage scores**.
+
+```python
+keyword_avg = (alpha * new_keyword_score) + ((1 - alpha) * keyword_avg)
+```
+
+**Measures:** Presence of critical technical terms in answers
+
+**Calculation:** Proportion of expected keywords found in user's answer
+
+### Why 70/30 Weighting?
+
+Semantic understanding is prioritized over keyword matching because:
+1. Deep comprehension matters more than memorization
+2. Users can explain concepts in different words
+3. Prevents gaming the system with keyword stuffing
+4. Keywords still ensure technical accuracy
+
+---
+
+## Statistics Fields
+
+### questions_attempted (Integer)
+
+Total number of questions answered for this topic.
+
+**Use cases:**
+- Determine if user has enough data for reliable mastery estimates
+- Track engagement per topic
+- Identify topics that need more practice
+
+### correct_count (Integer)
+
+Number of questions with `keyword_score > 0.6`.
+
+```python
+if keyword_score > 0.6:
+    correct_count += 1
+```
+
+**Metric:** Simple accuracy rate = `correct_count / questions_attempted`
+
+### avg_response_time (Float)
+
+Exponential Moving Average of response times in seconds.
+
+```python
+avg_response_time = (alpha * new_response_time) + ((1 - alpha) * avg_response_time)
+```
+
+**Use cases:**
+- Identify topics requiring more thinking time
+- Detect mastery (faster responses on familiar topics)
+- Flag potential comprehension issues (very fast but wrong answers)
+
+---
+
+## Learning Velocity
+
+### mastery_velocity (Float)
+
+The **rate of change** in mastery level, calculated after each answer:
+
+```python
+old_mastery = mastery_level  # Before update
+# ... update mastery_level ...
+mastery_velocity = mastery_level - old_mastery
+```
+
+**Interpretation:**
+- **Positive** → Improving (learning effectively)
+- **Near zero** → Plateauing (may need new strategies)
+- **Negative** → Declining (forgetting or struggling)
+
+**Example values:**
+- `+0.05` - Good progress
+- `+0.15` - Rapid learning
+- `-0.03` - Slight decline
+- `0.00` - Stagnation
+
+**Use cases:**
+- **Adaptive difficulty**: Increase difficulty on positive velocity
+- **Stagnation detection**: Recommend resources when velocity near zero
+- **Early warning**: Flag negative velocity for intervention
+
+### last_mastery (Float)
+
+The **previous mastery level** before the most recent update.
+
+**Use:** Historical tracking and velocity calculation validation
+
+---
+
+## Adaptive Difficulty System
+
+### current_difficulty (String)
+
+Current difficulty level for question generation: `"easy"`, `"medium"`, or `"hard"`.
+
+**Default:** `"medium"`
+
+### consecutive_good (Integer)
+
+Count of consecutive high-scoring answers (combined score > 0.7).
+
+```python
+combined_score = (semantic_score * 0.7) + (keyword_score * 0.3)
+if combined_score > 0.7:
+    consecutive_good += 1
+    consecutive_poor = 0
+```
+
+### consecutive_poor (Integer)
+
+Count of consecutive low-scoring answers (combined score < 0.4).
+
+```python
+if combined_score < 0.4:
+    consecutive_poor += 1
+    consecutive_good = 0
+```
+
+### Difficulty Adjustment Logic
+
+```python
+def update_difficulty(self):
+    if self.consecutive_good >= 3:
+        # User is doing very well - increase challenge
+        self.current_difficulty = "hard"
+        
+    elif self.consecutive_poor >= 2:
+        # User is struggling - provide easier questions
+        self.current_difficulty = "easy"
+        
+    else:
+        # Middle performance - maintain current level
+        if self.current_difficulty not in ["easy", "medium", "hard"]:
+            self.current_difficulty = "medium"
+```
+
+**Gradual progression** (in AdaptiveInterviewState):
+
+```python
+if self.consecutive_good >= 2:
+    if self.current_difficulty == "easy":
+        self.current_difficulty = "medium"
+    elif self.current_difficulty == "medium":
+        self.current_difficulty = "hard"
+        
+elif self.consecutive_poor >= 2:
+    if self.current_difficulty == "hard":
+        self.current_difficulty = "medium"
+    elif self.current_difficulty == "medium":
+        self.current_difficulty = "easy"
+```
+
+This creates a smooth learning curve that adapts to user performance in real-time.
+
+---
+
+## Concept-Level Tracking
+
+### concept_masteries (Text/JSON)
+
+**The primary field** for storing complete concept-level mastery data.
+
+**Structure:**
+
+```json
+{
+  "ACID Properties": {
+    "mastery_level": 0.75,
+    "attempts": 8,
+    "times_mentioned": 6,
+    "times_missed_when_sampled": 2,
+    "last_seen": 1709567234.5,
+    "stagnation_count": 0,
+    "is_weak": false,
+    "is_strong": true,
+    "priority_score": 0.32
+  },
+  "Normalization": {
+    "mastery_level": 0.35,
+    "attempts": 5,
+    "times_mentioned": 2,
+    "times_missed_when_sampled": 3,
+    "last_seen": 1709567190.2,
+    "stagnation_count": 2,
+    "is_weak": true,
+    "is_strong": false,
+    "priority_score": 0.85
+  }
+}
+```
+
+**Field descriptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mastery_level` | Float | Concept mastery score (0-1) |
+| `attempts` | Integer | Times this concept was sampled in questions |
+| `times_mentioned` | Integer | Times user mentioned this concept |
+| `times_missed_when_sampled` | Integer | Times user failed to mention when asked |
+| `last_seen` | Float | Unix timestamp of last question |
+| `stagnation_count` | Integer | Consecutive attempts without improvement |
+| `is_weak` | Boolean | True if mastery < 0.5 and multiple misses |
+| `is_strong` | Boolean | True if mastery > 0.7 consistently |
+| `priority_score` | Float | Sampling priority (higher = more likely to be asked) |
+
+### Helper Methods
+
+#### get_concept_masteries()
+
+Parses JSON and returns concept dictionary.
+
+```python
+mastery = UserMastery.query.filter_by(user_id=user_id, topic="DBMS").first()
+concepts = mastery.get_concept_masteries()
+
+for name, data in concepts.items():
+    print(f"{name}: {data['mastery_level']:.2f}")
+```
+
+#### set_concept_masteries(concept_dict)
+
+Serializes and saves concept dictionary.
+
+```python
+concepts = mastery.get_concept_masteries()
+concepts["Indexing"] = {
+    "mastery_level": 0.8,
+    "attempts": 3,
+    "is_strong": True
+}
+mastery.set_concept_masteries(concepts)
+db.session.commit()
+```
+
+---
+
+## Legacy Concept Fields
+
+These fields are **derived** from `concept_masteries` for backward compatibility:
+
+### missing_concepts (Text/JSON)
+
+JSON array of weak concept names.
+
+```python
+def get_missing_concepts(self):
+    concepts = self.get_concept_masteries()
+    return [name for name, data in concepts.items() if data.get('is_weak', False)]
+```
+
+### weak_concepts (Text/JSON)
+
+Same as `missing_concepts` - list of concepts with low mastery.
+
+### strong_concepts (Text/JSON)
+
+JSON array of strong concept names.
+
+```python
+def get_strong_concepts(self):
+    concepts = self.get_concept_masteries()
+    return [name for name, data in concepts.items() if data.get('is_strong', False)]
+```
+
+### concept_stagnation (Text/JSON)
+
+Mapping of concept names to stagnation counts.
+
+```python
+def get_concept_stagnation(self):
+    concepts = self.get_concept_masteries()
+    return {name: data.get('stagnation_count', 0) for name, data in concepts.items()}
+```
+
+**Note:** Modern code should use `concept_masteries` directly. These legacy fields exist for API compatibility.
+
+---
+
+## How Mastery is Calculated
+
+### Mastery Update Flow
+
+When a user answers a question:
+
+```python
+def update_mastery(self, semantic_score, keyword_score, response_time, missing=None):
+    # 1. Initialize safety defaults
+    self.semantic_avg = self.semantic_avg or 0.0
+    self.keyword_avg = self.keyword_avg or 0.0
+    self.mastery_level = self.mastery_level or 0.0
+    
+    # 2. Store old mastery for velocity
+    old_mastery = self.mastery_level
+    
+    # 3. Update exponential moving averages
+    alpha = 0.3  # Smoothing factor
+    self.semantic_avg = (alpha * semantic_score) + ((1 - alpha) * self.semantic_avg)
+    self.keyword_avg = (alpha * keyword_score) + ((1 - alpha) * self.keyword_avg)
+    
+    # 4. Calculate new mastery level (70/30 weighting)
+    self.mastery_level = (self.semantic_avg * 0.7) + (self.keyword_avg * 0.3)
+    
+    # 5. Calculate learning velocity
+    self.mastery_velocity = self.mastery_level - old_mastery
+    self.last_mastery = old_mastery
+    
+    # 6. Update response time average
+    self.avg_response_time = (alpha * response_time) + ((1 - alpha) * self.avg_response_time)
+    
+    # 7. Update counters
+    self.questions_attempted += 1
+    if keyword_score > 0.6:
+        self.correct_count += 1
+    
+    # 8. Update consecutive performance
+    combined_score = (semantic_score * 0.7 + keyword_score * 0.3)
+    if combined_score > 0.7:
+        self.consecutive_good += 1
+        self.consecutive_poor = 0
+    elif combined_score < 0.4:
+        self.consecutive_poor += 1
+        self.consecutive_good = 0
+    else:
+        self.consecutive_good = 0
+        self.consecutive_poor = 0
+    
+    # 9. Adjust difficulty
+    if self.consecutive_good >= 3:
+        self.current_difficulty = "hard"
+    elif self.consecutive_poor >= 2:
+        self.current_difficulty = "easy"
+    
+    # 10. Update timestamps
+    self.last_attempt = datetime.utcnow()
+    self.last_seen = datetime.utcnow().timestamp()
+    
+    return self
+```
+
+### Advanced Update in AdaptiveController
+
+The `AdaptiveInterviewController` performs more sophisticated updates:
+
+```python
+# From adaptive_controller.py:469
+mastery.mastery_velocity = mastery.mastery_level - old_mastery
+
+print(f"📈 TOPIC VELOCITY: {mastery.mastery_velocity:+.3f} "
+      f"(from {old_mastery:.3f} to {mastery.mastery_level:.3f})")
+
+# Update concept priorities with velocity
+for concept_name, concept in mastery.concepts.items():
+    concept.update_priority_score(velocity=mastery.mastery_velocity)
+```
+
+**Priority score calculation** considers:
+1. **Weakness** (low mastery → high priority)
+2. **Miss frequency** (often missed → high priority)
+3. **Stagnation** (not improving → high priority)
+4. **Recency** (long time since last seen → higher priority)
+5. **Velocity** (negative velocity → increase priority)
+
+---
+
+## Concept Mastery Tracking
+
+### ConceptMastery Class
+
+From `adaptive_state.py`, each concept is tracked with:
+
+```python
+@dataclass
+class ConceptMastery:
+    name: str
+    mastery_level: float = 0.0
+    attempts: int = 0
+    times_mentioned: int = 0
+    times_missed_when_sampled: int = 0
+    last_seen: float = 0.0
+    stagnation_count: int = 0
+    is_weak: bool = False
+    is_strong: bool = False
+    priority_score: float = 0.5
+```
+
+### Recording Attempts
+
+```python
+def record_attempt(self, mentioned: bool):
+    """Record whether concept was mentioned when sampled"""
+    self.attempts += 1
+    
+    if mentioned:
+        self.times_mentioned += 1
+        # Improve mastery
+        self.mastery_level = min(1.0, self.mastery_level + 0.1)
+        self.stagnation_count = 0  # Reset stagnation
+    else:
+        self.times_missed_when_sampled += 1
+        # Decrease mastery
+        self.mastery_level = max(0.0, self.mastery_level - 0.05)
+        self.stagnation_count += 1  # Increase stagnation
+    
+    # Update weak/strong flags
+    self.is_weak = (self.mastery_level < 0.5 and self.times_missed_when_sampled >= 2)
+    self.is_strong = (self.mastery_level > 0.7 and self.times_mentioned >= 3)
+    
+    self.last_seen = time.time()
+```
+
+### Priority Score Calculation
+
+```python
+def update_priority_score(self, velocity: float = 0.0):
+    """Calculate sampling priority based on multiple factors"""
+    # Base: inverse of mastery (weak concepts prioritized)
+    priority = 1.0 - self.mastery_level
+    
+    # Boost for frequently missed concepts
+    if self.times_missed_when_sampled > 2:
+        priority += 0.2
+    
+    # Boost for stagnating concepts
+    if self.stagnation_count >= 2:
+        priority += 0.15
+    
+    # Boost for concepts not seen recently
+    time_since_seen = time.time() - self.last_seen
+    if time_since_seen > 3600:  # 1 hour
+        priority += 0.1
+    
+    # Boost if topic velocity is negative (struggling)
+    if velocity < -0.05:
+        priority += 0.2
+    
+    self.priority_score = min(1.0, priority)
+```
+
+This ensures the system intelligently focuses on concepts that need the most attention.
+
+---
+
+## Database Operations
+
+### Creating Mastery Record
+
+```python
+from models import UserMastery, db
+
+mastery = UserMastery(
+    user_id=user.id,
+    topic="Operating Systems"
+)
+db.session.add(mastery)
+db.session.commit()
+```
+
+### Updating After Answer
+
+```python
+# Get mastery record
+mastery = UserMastery.query.filter_by(
+    user_id=user_id,
+    topic="DBMS"
+).first()
+
+if not mastery:
+    mastery = UserMastery(user_id=user_id, topic="DBMS")
+    db.session.add(mastery)
+
+# Update with scores
+mastery.update_mastery(
+    semantic_score=0.82,
+    keyword_score=0.75,
+    response_time=38.5
+)
+
+# Update concept-level data
+concepts = mastery.get_concept_masteries()
+if "ACID Properties" not in concepts:
+    concepts["ACID Properties"] = {
+        "mastery_level": 0.0,
+        "attempts": 0,
+        "times_mentioned": 0,
+        "times_missed_when_sampled": 0,
+        "is_weak": False,
+        "is_strong": False,
+        "priority_score": 0.5
+    }
+
+# Record concept attempt
+concept = concepts["ACID Properties"]
+concept["attempts"] += 1
+concept["times_mentioned"] += 1
+concept["mastery_level"] = min(1.0, concept["mastery_level"] + 0.1)
+
+mastery.set_concept_masteries(concepts)
+db.session.commit()
+
+print(f"Updated mastery: {mastery.mastery_level:.3f}")
+print(f"Velocity: {mastery.mastery_velocity:+.3f}")
+print(f"Current difficulty: {mastery.current_difficulty}")
+```
+
+### Querying Mastery Data
+
+```python
+# Get all topics for a user
+masteries = UserMastery.query.filter_by(user_id=user_id).all()
+
+for m in masteries:
+    print(f"{m.topic}: {m.mastery_level:.2f} ({m.current_difficulty})")
+    concepts = m.get_concept_masteries()
+    weak = [name for name, data in concepts.items() if data.get('is_weak')]
+    if weak:
+        print(f"  Weak concepts: {', '.join(weak)}")
+```
+
+### API Response Format
+
+```python
+def to_dict(self):
+    """Convert to dict for API responses"""
+    concepts = self.get_concept_masteries()
+    return {
+        'topic': self.topic,
+        'mastery_level': round(self.mastery_level, 3),
+        'questions_attempted': self.questions_attempted,
+        'current_difficulty': self.current_difficulty,
+        'weak_concepts': self.get_weak_concepts(),
+        'strong_concepts': self.get_strong_concepts(),
+        'learning_velocity': round(self.mastery_velocity, 3),
+        'stagnant_concepts': self.get_concept_stagnation(),
+        'concept_count': len(concepts)
+    }
+```
+
+---
+
+## Integration with Adaptive System
+
+The mastery tracking integrates with the adaptive interview system:
+
+1. **Question Generation**: Uses `current_difficulty` and weak concepts
+2. **Concept Sampling**: Prioritizes concepts with high `priority_score`
+3. **Session Planning**: Focuses on topics with low `mastery_level`
+4. **Feedback Generation**: Uses `mastery_velocity` to provide insights
+5. **Progress Tracking**: Monitors `mastery_velocity` over time
+
+### Example: Concept Sampling
+
+```python
+# From adaptive_controller.py
+concepts = mastery.get_concept_masteries()
+
+# Calculate sampling weights based on priority scores
+weights = [c.get('priority_score', 0.5) for c in concepts.values()]
+
+# Sample 3 concepts for the next question
+sampled = random.choices(
+    list(concepts.keys()),
+    weights=weights,
+    k=min(3, len(concepts))
+)
+
+print(f"Sampled concepts: {sampled}")
+```
+
+---
+
+## Best Practices
+
+1. **Always check for None values** before calculations
+2. **Use transactions** when updating multiple records
+3. **Validate scores** are in 0-1 range before saving
+4. **Log velocity changes** for debugging learning plateaus
+5. **Persist concept data frequently** to avoid data loss
+6. **Monitor stagnation counts** to trigger interventions
+
+## Related Documentation
+
+- [Database Schema](/technical/database-schema) - Complete database structure
+- [Adaptive Learning](/features/adaptive-learning) - How mastery tracking powers adaptive learning
+- [Interview Endpoints](/api/interview-endpoints) - Mastery and interview endpoints

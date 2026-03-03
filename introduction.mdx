@@ -1,0 +1,165 @@
+---
+title: 'Introduction'
+description: 'AI-powered interview preparation platform with real-time feedback and adaptive learning'
+---
+
+# Welcome to CS Interview Prep Platform
+
+An intelligent interview preparation system that combines **Retrieval-Augmented Generation (RAG)**, **real-time audio processing**, and **adaptive learning** to help you ace your computer science interviews.
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Get started in minutes with our step-by-step setup guide
+  </Card>
+  <Card
+    title="Features"
+    icon="sparkles"
+    href="/features"
+  >
+    Explore resume analysis, mock interviews, and adaptive learning
+  </Card>
+</CardGroup>
+
+## What Makes This Platform Unique
+
+This platform goes beyond traditional interview prep tools by implementing research-grade speech analysis and AI-powered personalization.
+
+### Intelligent Resume Analysis
+Upload your resume and get personalized interview questions based on your actual experience. The system uses **FAISS vector indexing** to understand your skills and project history, generating targeted questions that interviewers might ask about your specific background.
+
+### Real-Time Audio Interview Simulation
+Practice with live mock interviews that analyze both **what you say** and **how you say it**:
+
+- **Speech-to-Text**: Powered by AssemblyAI for streaming transcription with local Faster-Whisper fallback
+- **Voice Quality Analysis**: Pitch stability, speaking rate (WPM), and pause patterns using librosa's YIN algorithm
+- **Confidence Scoring**: Detects voice tremors and hesitation through shimmer/jitter analysis
+- **Real-time Feedback**: Live captioning shows your answers as you speak
+
+### Adaptive Learning System
+The platform tracks your mastery across topics and automatically adjusts difficulty:
+
+- **Topic Mastery Tracking**: Monitor progress in DBMS, OOP, Operating Systems, and more
+- **Concept-Level Analytics**: Identifies weak concepts and recommends focused practice
+- **Difficulty Adaptation**: Questions get harder as you improve (or easier if you struggle)
+- **Personalized Action Plans**: AI generates study plans based on your performance gaps
+
+### Comprehensive Knowledge Base
+Built on a curated database of 300+ computer science questions covering:
+
+- **Database Management Systems** (15 subtopics, 185 questions)
+- **Object-Oriented Programming** (8 subtopics, 200 questions)
+- **Operating Systems** (10 subtopics, 100 questions)
+
+<Note>
+All questions are automatically categorized by topic, subtopic, and difficulty level (Beginner/Intermediate/Advanced) using keyword-based classification.
+</Note>
+
+## Technology Stack
+
+The platform combines multiple cutting-edge technologies:
+
+### AI & Machine Learning
+
+<CardGroup cols={2}>
+  <Card title="Mistral AI" icon="brain">
+    Primary LLM for question generation, answer evaluation, and feedback
+  </Card>
+  <Card title="Sentence Transformers" icon="vector-square">
+    all-MiniLM-L6-v2 model for semantic similarity and resume matching
+  </Card>
+  <Card title="FAISS" icon="magnifying-glass">
+    Facebook AI Similarity Search for fast vector retrieval
+  </Card>
+  <Card title="Faster-Whisper" icon="microphone">
+    Local speech-to-text engine for offline transcription
+  </Card>
+</CardGroup>
+
+### Backend Architecture
+
+- **Flask**: Python web framework with WebSocket support (Flask-SocketIO)
+- **SQLAlchemy**: ORM for user data, sessions, and mastery tracking
+- **Librosa**: Digital signal processing for voice analysis
+- **NumPy**: Efficient audio buffer processing and statistics
+
+### Frontend
+
+- **React.js**: Interactive UI with real-time audio capture
+- **MediaRecorder API**: Browser-native audio streaming
+- **Socket.IO Client**: Bidirectional communication for live interviews
+
+## Hybrid Processing Architecture
+
+The platform uses a sophisticated **parallel processing** approach during live interviews:
+
+### Stream A: Signal Processing (Local)
+Raw audio bytes are analyzed immediately on the server:
+- Volume detection (RMS)
+- Pitch tracking (YIN algorithm)
+- Pause ratio calculation
+- Speaking rate (WPM)
+
+### Stream B: Semantic Processing (External)
+The same audio is sent to AssemblyAI for:
+- Real-time transcription
+- Live captioning
+- Text-based answer analysis
+
+### Final Synthesis
+When you finish answering, both streams combine:
+- Speech metrics (confidence, clarity, pace)
+- Transcript content (technical accuracy, completeness)
+- AI-generated feedback highlighting both delivery and content quality
+
+<Note>
+This dual-stream approach allows the platform to provide feedback on **communication skills** (how you present) and **technical knowledge** (what you know) simultaneously.
+</Note>
+
+## Key Metrics Tracked
+
+The system calculates research-grade metrics during each interview:
+
+| Metric | Description | Technology |
+|--------|-------------|------------|
+| **WPM** | Words per minute during speech | Transcript timing analysis |
+| **Pause Ratio** | Percentage of silence vs. speaking time | Voice Activity Detection |
+| **Pitch Stability** | Coefficient of variation in voice frequency | Librosa YIN + Welford's Algorithm |
+| **Semantic Similarity** | Answer relevance to ideal response | Sentence Transformers cosine similarity |
+| **Keyword Coverage** | Percentage of required technical terms mentioned | Keyword matching |
+| **Confidence Score** | Voice steadiness (shimmer/jitter) | Amplitude perturbation analysis |
+
+## RAG Pipeline
+
+Every technical question uses Retrieval-Augmented Generation:
+
+1. **Ingestion**: User uploads resume (PDF/DOCX)
+2. **Extraction**: PyPDF2/python-docx extracts text
+3. **Vectorization**: SentenceTransformer converts text to embeddings
+4. **Indexing**: FAISS creates searchable vector index
+5. **Retrieval**: When generating questions, the system queries your specific skills
+6. **Generation**: Mistral AI creates personalized questions based on your background
+
+This ensures every interview is tailored to your unique experience.
+
+## Ready to Start?
+
+<CardGroup cols={2}>
+  <Card
+    title="Installation Guide"
+    icon="download"
+    href="/quickstart"
+  >
+    Set up the platform locally in under 10 minutes
+  </Card>
+  <Card
+    title="Feature Deep Dive"
+    icon="compass"
+    href="/features"
+  >
+    Learn about resume analysis, mock interviews, and more
+  </Card>
+</CardGroup>

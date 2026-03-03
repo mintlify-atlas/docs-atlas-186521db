@@ -1,0 +1,966 @@
+---
+title: Frontend Structure
+description: React application architecture, components, WebSocket integration, and audio capture
+---
+
+## React Application Overview
+
+The frontend is a **React 19.2.0** single-page application (SPA) that provides a modern, real-time interview experience with **3D avatars**, **live transcription**, and **adaptive learning interfaces**.
+
+### Project Structure
+
+```
+frontend/src/
+├── index.js                    # Application entry point
+├── App.js                      # Root component with routing
+├── App.css                     # Global styles
+├── index.css                   # Base styles + Tailwind-like utilities
+│
+├── components/
+│   ├── Auth/                   # Authentication pages
+│   │   ├── Login.js
+│   │   ├── Signup.js
+│   │   ├── ForgotPassword.js
+│   │   └── ResetPassword.js
+│   │
+│   ├── Dashboard/              # Main dashboard
+│   │   ├── Dashboard.js
+│   │   ├── FeatureCard.js
+│   │   └── StatsCard.js
+│   │
+│   ├── Interview Types/
+│   │   ├── AgenticInterview/       # Adaptive AI interview
+│   │   │   ├── AgenticInterview.js
+│   │   │   ├── AvatarViewer.js     # 3D avatar with Three.js
+│   │   │   └── interviewerPersonas.js
+│   │   │
+│   │   ├── LiveStreamingInterview/ # Real-time audio interview
+│   │   │   ├── InterviewStreamer.jsx
+│   │   │   └── LiveInterviewIntegration.jsx
+│   │   │
+│   │   ├── HRInterview/            # HR behavioral interview
+│   │   │   ├── HRInterview.js
+│   │   │   ├── QuestionCard.js
+│   │   │   └── SessionHistory.js
+│   │   │
+│   │   ├── MockInterview/          # Traditional mock interview
+│   │   │   └── MockInterview.js
+│   │   │
+│   │   └── ConversationalInterview/ # Chat-based interview
+│   │       └── ConversationalInterview.js
+│   │
+│   ├── Profile/                # User profile management
+│   │   ├── Profile.js
+│   │   ├── InterviewHistory.js
+│   │   └── SkillsManager.js
+│   │
+│   ├── Resume/                 # Resume analysis
+│   │   ├── ResumeUpload.js
+│   │   └── GapAnalysis.js
+│   │
+│   ├── ActionPlan/             # Study recommendations
+│   │   └── ActionPlanGenerator.js
+│   │
+│   ├── Chat/                   # Chat interface components
+│   │   ├── ChatInterface.js
+│   │   ├── Message.js
+│   │   └── WelcomeMessage.js
+│   │
+│   └── Layout/                 # Shared layout components
+│       ├── Header.js
+│       ├── Sidebar.js
+│       ├── LoadingSpinner.js
+│       └── ThemeToggle.js
+│
+├── hooks/
+│   └── useInterviewStreaming.js    # WebSocket + MediaRecorder hook
+│
+├── services/
+│   └── api.js                      # Axios HTTP client
+│
+└── styles/
+    └── theme.css                   # Theme variables
+```
+
+## Root Component (App.js)
+
+### Routing Setup
+
+```javascript
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Login from './components/Auth/Login';
+import Dashboard from './components/Dashboard/Dashboard';
+import AgenticInterview from './components/AgenticInterview/AgenticInterview';
+// ... other imports
+
+function App() {
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Check authentication status on mount
+    checkAuthStatus();
+  }, []);
+
+  return (
+    <Router>
+      <Routes>
+        {/* Public routes */}
+        <Route path="/login" element={<Login onLogin={handleLogin} />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        
+        {/* Protected routes */}
+        <Route path="/" element={
+          <ProtectedRoute user={user}>
+            <Dashboard user={user} onLogout={handleLogout} />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/agentic-interview" element={
+          <ProtectedRoute user={user}>
+            <AgenticInterview user={user} />
+          </ProtectedRoute>
+        } />
+        
+        {/* ... more routes */}
+      </Routes>
+    </Router>
+  );
+}
+```
+
+## Authentication Components
+
+### Login.js
+
+```javascript
+import { useState } from 'react';
+import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+
+function Login({ onLogin }) {
+  const [credentials, setCredentials] = useState({
+    username: '',
+    password: ''
+  });
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    try {
+      const response = await axios.post(
+        'http://localhost:5000/api/login',
+        credentials,
+        { withCredentials: true }  // Important for session cookies
+      );
+      
+      if (response.data.user) {
+        onLogin(response.data.user);
+        navigate('/');
+      }
+    } catch (error) {
+      console.error('Login failed:', error);
+    }
+  };
+
+  return (
+    <div className="login-container">
+      <form onSubmit={handleSubmit}>
+        <input
+          type="text"
+          placeholder="Username"
+          value={credentials.username}
+          onChange={(e) => setCredentials({
+            ...credentials,
+            username: e.target.value
+          })}
+        />
+        {/* ... password field */}
+        <button type="submit">Login</button>
+      </form>
+    </div>
+  );
+}
+```
+
+## Dashboard Component
+
+### Dashboard.js
+
+```javascript
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Header from '../Layout/Header';
+import FeatureCard from './FeatureCard';
+import StatsCard from './StatsCard';
+
+function Dashboard({ user, onLogout }) {
+  const [stats, setStats] = useState({
+    totalInterviews: 0,
+    avgScore: 0,
+    recentSessions: []
+  });
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchUserStats();
+  }, []);
+
+  const fetchUserStats = async () => {
+    const response = await axios.get(
+      `http://localhost:5000/api/user-stats/${user.id}`,
+      { withCredentials: true }
+    );
+    setStats(response.data);
+  };
+
+  return (
+    <div className="dashboard">
+      <Header user={user} onLogout={onLogout} />
+      
+      <div className="stats-grid">
+        <StatsCard
+          title="Total Interviews"
+          value={stats.totalInterviews}
+          icon="📊"
+        />
+        <StatsCard
+          title="Average Score"
+          value={`${stats.avgScore}%`}
+          icon="⭐"
+        />
+      </div>
+      
+      <div className="features-grid">
+        <FeatureCard
+          title="Agentic Interview"
+          description="Adaptive AI-powered interview with 3D avatar"
+          icon="🤖"
+          onClick={() => navigate('/agentic-interview')}
+        />
+        
+        <FeatureCard
+          title="Live Streaming"
+          description="Real-time audio analysis with instant feedback"
+          icon="🎤"
+          onClick={() => navigate('/live-interview')}
+        />
+        
+        {/* ... more features */}
+      </div>
+    </div>
+  );
+}
+```
+
+## Interview Components
+
+### AgenticInterview.js (Adaptive Interview)
+
+**Key Features:**
+- 3D avatar with Three.js
+- Real-time question adaptation
+- Concept mastery tracking
+
+```javascript
+import { useState, useEffect } from 'react';
+import { io } from 'socket.io-client';
+import AvatarViewer from './AvatarViewer';
+import { interviewerPersonas } from './interviewerPersonas';
+
+function AgenticInterview({ user }) {
+  const [socket, setSocket] = useState(null);
+  const [currentQuestion, setCurrentQuestion] = useState(null);
+  const [userAnswer, setUserAnswer] = useState('');
+  const [feedback, setFeedback] = useState(null);
+  const [topic, setTopic] = useState('React');
+  const [persona, setPersona] = useState(interviewerPersonas[0]);
+
+  useEffect(() => {
+    // Connect to WebSocket
+    const newSocket = io('http://localhost:5000', {
+      withCredentials: true
+    });
+    
+    newSocket.on('connect', () => {
+      console.log('Connected to agentic interview');
+      requestNextQuestion();
+    });
+    
+    newSocket.on('question', (data) => {
+      setCurrentQuestion(data);
+    });
+    
+    newSocket.on('feedback', (data) => {
+      setFeedback(data);
+    });
+    
+    setSocket(newSocket);
+    
+    return () => newSocket.close();
+  }, []);
+
+  const requestNextQuestion = () => {
+    socket.emit('get_adaptive_question', {
+      user_id: user.id,
+      topic: topic
+    });
+  };
+
+  const submitAnswer = () => {
+    socket.emit('submit_adaptive_answer', {
+      user_id: user.id,
+      question_id: currentQuestion.id,
+      answer: userAnswer
+    });
+  };
+
+  return (
+    <div className="agentic-interview">
+      {/* 3D Avatar */}
+      <AvatarViewer persona={persona} />
+      
+      {/* Question Display */}
+      <div className="question-section">
+        <h2>{currentQuestion?.text}</h2>
+      </div>
+      
+      {/* Answer Input */}
+      <textarea
+        value={userAnswer}
+        onChange={(e) => setUserAnswer(e.target.value)}
+        placeholder="Type your answer here..."
+      />
+      
+      <button onClick={submitAnswer}>Submit Answer</button>
+      
+      {/* Feedback Display */}
+      {feedback && (
+        <div className="feedback">
+          <h3>Feedback</h3>
+          <p>Score: {feedback.score}%</p>
+          <p>{feedback.analysis}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### AvatarViewer.js (Three.js 3D Avatar)
+
+```javascript
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, useGLTF } from '@react-three/drei';
+import { Suspense } from 'react';
+
+function Avatar({ persona }) {
+  // Load 3D model (GLB/GLTF format)
+  const { scene } = useGLTF(persona.modelPath);
+  
+  return <primitive object={scene} scale={1.5} />;
+}
+
+function AvatarViewer({ persona }) {
+  return (
+    <div className="avatar-container" style={{ width: '400px', height: '400px' }}>
+      <Canvas camera={{ position: [0, 0, 5], fov: 50 }}>
+        <ambientLight intensity={0.5} />
+        <spotLight position={[10, 10, 10]} angle={0.15} />
+        
+        <Suspense fallback={null}>
+          <Avatar persona={persona} />
+        </Suspense>
+        
+        <OrbitControls enableZoom={false} />
+      </Canvas>
+    </div>
+  );
+}
+
+export default AvatarViewer;
+```
+
+### InterviewStreamer.jsx (Real-time Audio Interview)
+
+**Key Features:**
+- MediaRecorder API for audio capture
+- WebSocket streaming
+- Live transcription display
+- Real-time WPM calculation
+
+```javascript
+import { useInterviewStreaming } from '../../hooks/useInterviewStreaming';
+import Header from '../Layout/Header';
+
+function InterviewStreamer({ user, onLogout }) {
+  const {
+    isConnected,
+    isRecording,
+    transcript,
+    wpm,
+    finalAnalysis,
+    startRecording,
+    stopRecording,
+    error,
+    status
+  } = useInterviewStreaming(user.id);
+
+  return (
+    <div className="interview-streamer">
+      <Header user={user} onLogout={onLogout} title="Live Interview" />
+      
+      {/* Status Indicators */}
+      <div className="status">
+        <span>Connection: {isConnected ? '🟢' : '🔴'}</span>
+        <span>Status: {status}</span>
+        <span>Recording: {isRecording ? '🎤 ON' : '⏸️ OFF'}</span>
+      </div>
+      
+      {/* Controls */}
+      <div className="controls">
+        <button
+          onClick={startRecording}
+          disabled={!isConnected || isRecording}
+        >
+          🎤 Start Interview
+        </button>
+        
+        <button
+          onClick={stopRecording}
+          disabled={!isRecording}
+        >
+          ⏹️ Stop & Analyze
+        </button>
+      </div>
+      
+      {/* Live Transcript */}
+      <div className="live-transcript">
+        <h3>Live Speech Recognition</h3>
+        <div className="transcript-box">
+          {transcript || 'Start speaking...'}
+        </div>
+        {wpm > 0 && <p>Speaking Rate: {wpm} WPM</p>}
+      </div>
+      
+      {/* Final Analysis */}
+      {finalAnalysis && (
+        <div className="analysis">
+          <h3>Interview Analysis</h3>
+          <p>Overall Score: {finalAnalysis.score}%</p>
+          <p>Pitch Stability: {finalAnalysis.pitch_stability}</p>
+          <p>Semantic Similarity: {finalAnalysis.semantic_score}</p>
+          <div>{finalAnalysis.feedback}</div>
+        </div>
+      )}
+      
+      {error && <div className="error">{error}</div>}
+    </div>
+  );
+}
+
+export default InterviewStreamer;
+```
+
+## Custom Hooks
+
+### useInterviewStreaming.js
+
+**Purpose:** Manages WebSocket connection and MediaRecorder for real-time audio streaming
+
+```javascript
+import { useState, useEffect, useRef } from 'react';
+import { io } from 'socket.io-client';
+
+export function useInterviewStreaming(userId) {
+  const [isConnected, setIsConnected] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [transcript, setTranscript] = useState('');
+  const [wpm, setWpm] = useState(0);
+  const [finalAnalysis, setFinalAnalysis] = useState(null);
+  const [error, setError] = useState(null);
+  const [status, setStatus] = useState('Ready');
+  
+  const socketRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const streamRef = useRef(null);
+
+  useEffect(() => {
+    // Initialize WebSocket connection
+    socketRef.current = io('http://localhost:5000', {
+      withCredentials: true
+    });
+    
+    const socket = socketRef.current;
+    
+    socket.on('connect', () => {
+      console.log('WebSocket connected');
+      setIsConnected(true);
+      socket.emit('warmup', { user_id: userId });
+    });
+    
+    socket.on('disconnect', () => {
+      setIsConnected(false);
+    });
+    
+    socket.on('status', (data) => {
+      setStatus(data.message);
+    });
+    
+    socket.on('transcript', (data) => {
+      setTranscript(prev => prev + ' ' + data.text);
+    });
+    
+    socket.on('metrics', (data) => {
+      setWpm(data.wpm);
+    });
+    
+    socket.on('final_analysis', (data) => {
+      setFinalAnalysis(data);
+      setIsRecording(false);
+    });
+    
+    socket.on('error', (data) => {
+      setError(data.message);
+    });
+    
+    return () => {
+      socket.close();
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [userId]);
+
+  const startRecording = async () => {
+    try {
+      // Request microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,       // Mono
+          sampleRate: 16000,     // 16kHz
+          echoCancellation: true,
+          noiseSuppression: true
+        }
+      });
+      
+      streamRef.current = stream;
+      
+      // Create MediaRecorder
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm',
+        audioBitsPerSecond: 16000
+      });
+      
+      mediaRecorderRef.current = mediaRecorder;
+      
+      // Send audio chunks to backend
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          // Convert to ArrayBuffer
+          event.data.arrayBuffer().then(buffer => {
+            socketRef.current.emit('audio_chunk', buffer);
+          });
+        }
+      };
+      
+      // Start recording with 100ms chunks
+      mediaRecorder.start(100);
+      
+      // Notify backend
+      socketRef.current.emit('start_interview', { user_id: userId });
+      
+      setIsRecording(true);
+      setTranscript('');
+      setFinalAnalysis(null);
+      
+    } catch (err) {
+      console.error('Microphone access denied:', err);
+      setError('Please allow microphone access');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+    }
+    
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+    }
+    
+    socketRef.current.emit('stop_interview', { user_id: userId });
+  };
+
+  return {
+    isConnected,
+    isRecording,
+    transcript,
+    wpm,
+    finalAnalysis,
+    error,
+    status,
+    startRecording,
+    stopRecording
+  };
+}
+```
+
+## Services
+
+### api.js (Axios HTTP Client)
+
+```javascript
+import axios from 'axios';
+
+const API_BASE_URL = 'http://localhost:5000/api';
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,  // Include cookies in requests
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+// Request interceptor
+api.interceptors.request.use(
+  (config) => {
+    // Add any auth tokens if needed
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Redirect to login
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+```
+
+## Key Dependencies
+
+### package.json Analysis
+
+```json
+{
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.4",      // Client-side routing
+    "socket.io-client": "^4.8.3",      // WebSocket client
+    "axios": "^1.12.2",                // HTTP requests
+    
+    "@react-three/fiber": "^9.5.0",    // Three.js React renderer
+    "@react-three/drei": "^10.7.7",    // Three.js helpers
+    "three": "^0.183.1",               // 3D graphics library
+    
+    "lucide-react": "^0.575.0",        // Modern icon library
+    "react-markdown": "^10.1.0",       // Markdown rendering
+    "react-syntax-highlighter": "^16.1.1", // Code highlighting
+    "remark-gfm": "^4.0.1"             // GitHub-flavored markdown
+  }
+}
+```
+
+### Key Technology Integration
+
+#### 1. WebSocket (Socket.IO Client)
+
+**Purpose:** Real-time bidirectional communication
+
+```javascript
+import { io } from 'socket.io-client';
+
+const socket = io('http://localhost:5000', {
+  withCredentials: true,
+  transports: ['websocket', 'polling']
+});
+
+// Event listeners
+socket.on('connect', () => console.log('Connected'));
+socket.on('transcript', (data) => updateTranscript(data));
+
+// Emit events
+socket.emit('audio_chunk', audioBuffer);
+```
+
+#### 2. MediaRecorder API
+
+**Purpose:** Capture audio from user's microphone
+
+```javascript
+const stream = await navigator.mediaDevices.getUserMedia({
+  audio: {
+    channelCount: 1,
+    sampleRate: 16000,
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true
+  }
+});
+
+const recorder = new MediaRecorder(stream, {
+  mimeType: 'audio/webm',
+  audioBitsPerSecond: 16000
+});
+
+recorder.ondataavailable = (event) => {
+  // Send to backend
+  socket.emit('audio_chunk', event.data);
+};
+
+// Record in 100ms chunks
+recorder.start(100);
+```
+
+#### 3. Three.js (3D Avatars)
+
+**Purpose:** Render interactive 3D interviewer avatars
+
+```javascript
+import { Canvas } from '@react-three/fiber';
+import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
+
+<Canvas>
+  <PerspectiveCamera position={[0, 0, 5]} />
+  <ambientLight intensity={0.5} />
+  <spotLight position={[10, 10, 10]} />
+  <mesh>
+    <boxGeometry args={[1, 1, 1]} />
+    <meshStandardMaterial color="orange" />
+  </mesh>
+  <OrbitControls />
+</Canvas>
+```
+
+#### 4. React Router (Navigation)
+
+```javascript
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+
+<Routes>
+  <Route path="/" element={<Dashboard />} />
+  <Route path="/agentic-interview" element={<AgenticInterview />} />
+  <Route path="/live-interview" element={<InterviewStreamer />} />
+  <Route path="*" element={<Navigate to="/" />} />
+</Routes>
+```
+
+## Audio Processing Flow
+
+```
+[User Microphone]
+        ↓
+[getUserMedia API]
+        ↓
+Audio Stream (16kHz, Mono)
+        ↓
+[MediaRecorder]
+        ↓
+WebM Audio Chunks (100ms intervals)
+        ↓
+[ArrayBuffer Conversion]
+        ↓
+[Socket.IO emit('audio_chunk')]
+        ↓
+[WebSocket → Flask Backend]
+        ↓
+[Parallel Processing]
+    ├─→ Signal Analysis (Pitch, Volume)
+    └─→ AssemblyAI Transcription
+        ↓
+[Socket.IO emit('transcript')]
+        ↓
+[React State Update]
+        ↓
+[UI Re-render with Live Transcript]
+```
+
+## Component Communication Patterns
+
+### 1. Props Drilling
+
+```javascript
+<App user={user}>
+  <Dashboard user={user}>
+    <Header user={user} />
+  </Dashboard>
+</App>
+```
+
+### 2. WebSocket Events
+
+```javascript
+// Parent component
+const [transcript, setTranscript] = useState('');
+
+socket.on('transcript', (data) => {
+  setTranscript(prev => prev + ' ' + data.text);
+});
+
+// Child component receives updated transcript
+<TranscriptDisplay text={transcript} />
+```
+
+### 3. Custom Hooks (State + Logic Encapsulation)
+
+```javascript
+// Hook encapsulates WebSocket logic
+const { isRecording, transcript, startRecording } = useInterviewStreaming();
+
+// Component uses hook
+function Interview() {
+  const streaming = useInterviewStreaming(userId);
+  
+  return (
+    <button onClick={streaming.startRecording}>
+      Start
+    </button>
+  );
+}
+```
+
+## Styling Architecture
+
+### index.css (Utility Classes)
+
+```css
+/* Flexbox utilities */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+
+/* Spacing */
+.p-4 { padding: 1rem; }
+.m-2 { margin: 0.5rem; }
+.gap-4 { gap: 1rem; }
+
+/* Typography */
+.text-xl { font-size: 1.25rem; }
+.font-bold { font-weight: 700; }
+
+/* Colors */
+.bg-primary { background: #3b82f6; }
+.text-white { color: white; }
+```
+
+### Component-Specific CSS
+
+```css
+/* InterviewStreamer.css */
+.interview-streamer {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.live-transcript-box {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  min-height: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: 'Courier New', monospace;
+  line-height: 1.6;
+}
+```
+
+## State Management
+
+**Approach:** React useState + useEffect (no external state library)
+
+**Reasoning:**
+- Application is component-focused
+- WebSocket provides real-time sync
+- Session-based auth (server manages state)
+- Most state is local to components
+
+**Example:**
+
+```javascript
+function AgenticInterview() {
+  // Local component state
+  const [question, setQuestion] = useState(null);
+  const [answer, setAnswer] = useState('');
+  const [feedback, setFeedback] = useState(null);
+  
+  // WebSocket provides global sync
+  useEffect(() => {
+    socket.on('question', setQuestion);
+    socket.on('feedback', setFeedback);
+  }, []);
+}
+```
+
+## Build & Deployment
+
+### Development Server
+
+```bash
+npm start
+# Runs on http://localhost:3000
+# Hot reloading enabled
+```
+
+### Production Build
+
+```bash
+npm run build
+# Creates optimized bundle in build/
+# Minified, tree-shaken, code-split
+```
+
+### Build Output Structure
+
+```
+build/
+├── static/
+│   ├── css/
+│   │   └── main.[hash].css
+│   ├── js/
+│   │   ├── main.[hash].js
+│   │   └── [chunk].[hash].js
+│   └── media/
+│       └── [assets]
+├── index.html
+└── manifest.json
+```
+
+## Performance Optimizations
+
+1. **Code Splitting:** React.lazy() for route-based splitting
+2. **Memoization:** React.memo for expensive components
+3. **Debouncing:** Input handlers debounced (300ms)
+4. **WebSocket Throttling:** Audio chunks sent every 100ms (not per sample)
+5. **Virtual Scrolling:** Large lists use windowing
+
+## Browser Compatibility
+
+**Required APIs:**
+- MediaRecorder API (Chrome 49+, Firefox 25+)
+- WebSocket (All modern browsers)
+- getUserMedia (HTTPS required)
+- WebGL (for Three.js avatars)
+
+**Polyfills:** None required for modern browsers (2020+)
+
+## Next Steps
+
+<Card title="Architecture Overview" icon="diagram-project" href="/technical/architecture-overview">
+  Return to system architecture overview
+</Card>

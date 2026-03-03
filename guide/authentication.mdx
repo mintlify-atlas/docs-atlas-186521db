@@ -1,0 +1,217 @@
+---
+title: Authentication
+description: Learn how to sign up, log in, and manage your account security
+---
+
+## Overview
+
+The platform uses JWT (JSON Web Token) based authentication to secure your account and sessions. All authenticated requests include a Bearer token in the Authorization header.
+
+## Sign Up Process
+
+<Steps>
+  <Step title="Create your account">
+    Navigate to the sign-up page and provide the following required information:
+    
+    **Required Fields:**
+    - **Username**: 3-20 characters, letters, numbers, and underscores only
+    - **Email**: Valid email address format
+    - **Password**: Minimum 6 characters
+    - **Full Name**: Your display name (optional but recommended)
+
+    The system validates your input in real-time and prevents duplicate usernames or emails.
+
+    ```bash
+    POST /api/signup
+    {
+      "username": "john_doe",
+      "email": "john@example.com",
+      "password": "securepass123",
+      "full_name": "John Doe"
+    }
+    ```
+  </Step>
+
+  <Step title="Receive your access token">
+    Upon successful registration, you'll receive:
+    - A JWT access token for API authentication
+    - Your user profile information
+    - Automatic login to the platform
+
+    The access token is used for all subsequent authenticated requests.
+  </Step>
+
+  <Step title="Complete your profile">
+    After signing up, complete your profile by adding:
+    - Phone number
+    - Years of experience
+    - Technical skills
+    - Resume (required for interview preparation)
+
+    See [Profile Setup](/guide/profile-setup) for detailed instructions.
+  </Step>
+</Steps>
+
+## Login Flow
+
+<Steps>
+  <Step title="Enter credentials">
+    Provide your username and password at the login page.
+
+    ```bash
+    POST /api/login
+    {
+      "username": "john_doe",
+      "password": "securepass123"
+    }
+    ```
+  </Step>
+
+  <Step title="Receive access token">
+    On successful authentication:
+    - JWT token is generated with your user ID
+    - Token includes expiration time for security
+    - Your session is established
+
+    **Response:**
+    ```json
+    {
+      "success": true,
+      "message": "Login successful",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "user": {
+        "id": 1,
+        "username": "john_doe",
+        "email": "john@example.com",
+        "full_name": "John Doe"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Use the token">
+    Include the token in all API requests:
+
+    ```bash
+    Authorization: Bearer <your-token>
+    ```
+
+    The token is automatically validated on each request to protected endpoints.
+  </Step>
+</Steps>
+
+## Password Reset
+
+If you forget your password, you can reset it using the two-step recovery process:
+
+<Steps>
+  <Step title="Request password reset">
+    Submit your registered email address:
+
+    ```bash
+    POST /api/forgot-password
+    {
+      "email": "john@example.com"
+    }
+    ```
+
+    For security, the system always returns a success message regardless of whether the email exists (prevents email enumeration attacks).
+  </Step>
+
+  <Step title="Check your email">
+    If your email is registered, you'll receive a password reset link containing a secure token.
+    
+    **Important:**
+    - The reset token expires in 15 minutes
+    - Tokens can only be used once
+    - Each new request invalidates previous tokens
+  </Step>
+
+  <Step title="Set new password">
+    Click the link in your email and enter a new password:
+
+    ```bash
+    POST /api/reset-password
+    {
+      "token": "<token-from-email>",
+      "new_password": "newSecurePass456"
+    }
+    ```
+
+    Password requirements:
+    - Minimum 6 characters
+    - Should be unique and not previously used
+  </Step>
+</Steps>
+
+## Session Management
+
+### Token Lifecycle
+
+Your JWT token:
+- Is issued upon login or signup
+- Contains your user ID and expiration time
+- Is signed with HS256 algorithm for security
+- Must be refreshed after expiration
+
+### Token Validation
+
+Every protected API endpoint validates your token:
+
+1. Checks for `Authorization: Bearer <token>` header
+2. Verifies token signature using the secret key
+3. Checks token expiration
+4. Loads your user data from the database
+5. Attaches user to request context (`g.current_user`)
+
+**Common Error Responses:**
+
+```json
+// Missing or invalid header
+{
+  "error": "Missing or invalid Authorization header"
+}
+
+// Expired or invalid token
+{
+  "error": "Invalid or expired token"
+}
+
+// User not found
+{
+  "error": "User not found"
+}
+```
+
+### Security Best Practices
+
+<Tip>
+  **Keep your token secure:**
+  - Never share your access token
+  - Store tokens securely in your client application
+  - Log out when using shared devices
+  - Request a new token if you suspect compromise
+</Tip>
+
+<Warning>
+  Tokens are stored in the `reset_token` field of the User model with an expiration timestamp in `reset_token_expiry`. These are automatically cleared after successful password reset.
+</Warning>
+
+## Next Steps
+
+After authentication:
+
+<CardGroup cols={2}>
+  <Card title="Complete Profile" icon="user" href="/guide/profile-setup">
+    Set up your profile with skills and experience
+  </Card>
+  <Card title="Upload Resume" icon="file-upload" href="/guide/profile-setup">
+    Upload your resume for personalized interview prep
+  </Card>
+  <Card title="Start Interview" icon="comments" href="/guide/interview-sessions">
+    Begin your first mock interview session
+  </Card>
+  <Card title="Track Progress" icon="chart-line" href="/guide/performance-tracking">
+    Monitor your improvement over time
+  </Card>
+</CardGroup>

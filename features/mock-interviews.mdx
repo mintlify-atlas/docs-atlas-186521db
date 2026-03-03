@@ -1,0 +1,299 @@
+---
+title: Mock Interviews
+description: Practice realistic interview sessions with AI-powered question generation and detailed feedback
+---
+
+## Overview
+
+Mock Interviews simulate real technical interview experiences with AI-generated questions tailored to your resume and target job description. Get personalized questions, real-time evaluation, and comprehensive feedback to improve your interview performance.
+
+## Starting an Interview Session
+
+<Steps>
+  <Step title="Select Interview Type">
+    Choose from technical, behavioral, project-based, or mixed interview formats. Each format focuses on different aspects of the interview process.
+  </Step>
+  
+  <Step title="Configure Session Parameters">
+    - **Number of Questions**: Typically 5-10 questions per session
+    - **Difficulty Mix**: System automatically balances easy, medium, and hard questions
+    - **Focus Areas**: Optional targeting (e.g., system design, coding, behavioral)
+  </Step>
+  
+  <Step title="Start Recording">
+    Click "Start Interview" to begin. For audio sessions, grant microphone permissions for real-time speech-to-text.
+  </Step>
+  
+  <Step title="Answer Questions">
+    Respond to each question either via text input or voice recording. Take your time to provide thoughtful, structured answers.
+  </Step>
+  
+  <Step title="Review Feedback">
+    After completing all questions, receive detailed evaluation with scores, strengths, improvements, and model answers.
+  </Step>
+</Steps>
+
+## Question Generation
+
+### Personalized Question Creation
+
+The platform uses advanced AI (Mistral Large) to generate questions specifically for you:
+
+```python
+# Source: backend/mock_interview_engine.py:37
+generate_interview_questions(resume_context, job_description, skills, experience, question_count=8)
+```
+
+### What Makes Questions Personalized
+
+<Tip>
+Questions reference YOUR actual projects and technologies. For example, if your resume mentions "React Hooks" in an e-commerce project, you might get: "In your e-commerce project using React Hooks, how did you manage complex state across components?"
+</Tip>
+
+**Question Generation Inputs:**
+- **Resume Context**: Your top skills, projects, and experience (up to 2,500 chars)
+- **Skills List**: Technologies extracted from your resume (up to 25 skills)
+- **Experience Level**: Years of experience to calibrate difficulty
+- **Job Description**: Target role requirements (up to 2,500 chars)
+- **Variation Seed**: Ensures unique questions across multiple sessions
+
+### Question Types
+
+Each question is categorized by type:
+
+1. **Technical**: Deep-dive into technologies and concepts
+   - Example: "Explain your approach to database query optimization in your current stack"
+
+2. **Behavioral**: STAR method scenarios and soft skills
+   - Example: "Tell me about a time you had to resolve a critical production issue under pressure"
+
+3. **Project-Based**: Deep dives into your actual work
+   - Example: "Walk me through the architecture decisions you made in your [specific project]"
+
+4. **Situational**: Hypothetical problem-solving
+   - Example: "How would you handle a disagreement with a senior engineer about technical approach?"
+
+5. **System Design**: Large-scale architecture challenges
+   - Example: "Design a URL shortening service handling 1 billion requests/day"
+
+### Difficulty Progression
+
+Questions follow a strategic difficulty curve:
+- **First 1/3**: Easy questions to build confidence
+- **Middle 1/3**: Medium difficulty for core assessment
+- **Final 1/3**: Hard questions to test advanced knowledge
+
+<Note>
+The system ensures at least 4-6 **expected keywords** per question, which are specific technical/conceptual terms that strong answers should include.
+</Note>
+
+## Answer Evaluation
+
+### Scoring Dimensions
+
+Every answer is evaluated across four dimensions:
+
+```python
+# Source: backend/mock_interview_engine.py:174
+evaluate_answer(question, user_answer, resume_context, job_description)
+```
+
+| Dimension | Weight | What It Measures |
+|-----------|--------|------------------|
+| **Relevance & Completeness** | 0-30 pts | Does it directly answer the question? |
+| **Technical Accuracy** | 0-40 pts | Are concepts correct and detailed? |
+| **Structure & Clarity** | 0-20 pts | Is it well-organized (e.g., STAR method)? |
+| **Keyword Coverage** | 0-10 pts | Which expected concepts were mentioned? |
+
+### Grading Scale
+
+- **A (85-100)**: Excellent - Interview-ready answer
+- **B (70-84)**: Good - Minor improvements needed
+- **C (55-69)**: Average - Significant gaps to address
+- **D (40-54)**: Below Average - Major rework required
+- **F (&lt;40)**: Poor - Fundamental concepts missing
+
+<Tip>
+The AI evaluator is calibrated to be **highly polarizing**. A very poor answer scores 10-30, average 50-70, and excellent 85-100. This ensures honest feedback.
+</Tip>
+
+## Detailed Feedback
+
+For each answer, you receive:
+
+### 1. Strengths
+Specific things you said well, with **direct quotes** from your answer:
+- "You correctly identified the use of mutex locks and explained the difference from semaphores"
+- "Strong use of quantified metrics: '40% reduction in query time'"
+
+### 2. Improvements
+Specific missing concepts with explanations:
+- "Missing mention of database indexing strategies. You should have discussed B-tree vs Hash indexes"
+- "Answer lacked the 'Result' component of STAR. Always quantify outcomes"
+
+### 3. Model Answer
+A complete 200-250 word ideal answer covering all key concepts:
+- Written as if by an expert candidate
+- Includes concrete examples and metrics
+- Demonstrates proper structure (STAR for behavioral, requirements→design→trade-offs for system design)
+
+### 4. Keyword Analysis
+- **Covered Keywords**: Concepts you successfully mentioned
+- **Missing Keywords**: Expected terms you should have included
+- Helps identify knowledge gaps
+
+## Session Summary
+
+After completing all questions, receive comprehensive session analytics:
+
+```python
+# Source: backend/mock_interview_engine.py:295
+generate_session_summary(questions, answers, evaluations, job_description)
+```
+
+### Aggregate Metrics
+
+- **Average Score**: Overall performance across all questions
+- **Overall Grade**: A-F grade based on average score
+- **Completion Rate**: Percentage of questions answered
+- **Grade Distribution**: Count of A, B, C, D, F responses
+
+### Performance by Question Type
+
+```json
+{
+  "technical": 72,
+  "behavioral": 85,
+  "system-design": 45,
+  "project-based": 68
+}
+```
+
+Identifies your **strongest area** and **weakest area** for targeted practice.
+
+### AI-Powered Insights
+
+The system generates personalized narrative feedback:
+
+**1. Performance Narrative** (3-4 sentences)
+- References specific question types and scores
+- Honest assessment: "Your behavioral questions scored 85% but system design answers averaged only 45%, indicating strong soft skills but gaps in architectural thinking."
+
+**2. Skill Gaps** (3 specific gaps)
+- Not generic advice - tied to YOUR answers
+- Example: "Lacks depth in distributed systems concepts like CAP theorem and eventual consistency"
+
+**3. Study Plan** (3 actionable items)
+- Specific resources and approaches
+- Example: "Study database normalization forms (1NF-BCNF) using SQL practice on LeetCode"
+
+**4. Interview Tips** (3 tips)
+- Customized to YOUR weaknesses
+- Example: "When discussing projects, always include quantified business impact (% improvement, $ saved, users affected)"
+
+**5. Readiness Verdict** (1 honest sentence)
+- Clear yes/no with the biggest blocker
+- Example: "Not yet ready - system design skills need 2-3 months focused practice before senior-level interviews"
+
+## Real-Time Audio Streaming
+
+### Voice Response Feature
+
+For a more realistic experience, use voice responses:
+
+<Steps>
+  <Step title="Enable Microphone">
+    Grant browser permissions for microphone access when prompted
+  </Step>
+  
+  <Step title="Record Your Answer">
+    Click the microphone icon and speak naturally. The system uses speech-to-text to transcribe your response in real-time
+  </Step>
+  
+  <Step title="Review Transcription">
+    Edit the transcribed text if needed before submitting for evaluation
+  </Step>
+  
+  <Step title="Submit for Evaluation">
+    Final answer is evaluated exactly like text responses - same scoring dimensions apply
+  </Step>
+</Steps>
+
+<Note>
+Voice responses help simulate real interview pressure and improve your verbal communication skills. Practice speaking clearly and concisely.
+</Note>
+
+## Best Practices
+
+### For Technical Questions
+- State the core concept first, then elaborate
+- Use specific terminology from the expected keywords
+- Include trade-offs and alternative approaches
+- Reference real-world experience when possible
+
+### For Behavioral Questions
+- Always use **STAR method**: Situation, Task, Action, Result
+- Include **quantified outcomes**: percentages, dollar amounts, user counts
+- Be specific about YOUR role (not team's role)
+- Keep it concise: 2-3 minutes max
+
+### For System Design Questions
+- Follow structure: **Requirements → Design → Trade-offs → Scaling**
+- Start with clarifying questions
+- Draw mental diagrams (or use whiteboard feature)
+- Discuss failure handling and monitoring
+
+### For Project-Based Questions
+- Reference actual projects from your resume
+- Explain technical decisions and their business impact
+- Discuss challenges faced and how you overcame them
+- Mention technologies used and why they were chosen
+
+## Example Workflow
+
+<Steps>
+  <Step title="Session Start">
+    Start interview with 8 questions, mixed difficulty, full-stack engineer role
+  </Step>
+  
+  <Step title="Question 1 (Easy, Behavioral)">
+    "Tell me about your most challenging project..."
+    - Your answer: 180 words, mentions specific technologies and 40% performance improvement
+    - Score: 88/100 (Grade A)
+    - Strength: "Excellent use of STAR with quantified results"
+    - Improvement: "Could elaborate more on trade-offs considered"
+  </Step>
+  
+  <Step title="Question 5 (Hard, System Design)">
+    "Design a URL shortening service..."
+    - Your answer: 95 words, mentions database but lacks caching/scaling
+    - Score: 52/100 (Grade C)
+    - Missing keywords: "load balancer", "caching", "sharding", "rate limiting"
+    - Model answer provided: Complete solution with all components
+  </Step>
+  
+  <Step title="Session Summary">
+    - Average: 72/100 (Grade B)
+    - Answered: 8/8 (100% completion)
+    - Strongest: Behavioral (85 avg)
+    - Weakest: System Design (48 avg)
+    - Verdict: "Good foundation but system design needs focused practice - study distributed systems patterns"
+  </Step>
+</Steps>
+
+## Technical Details
+
+### AI Model
+- Uses **Mistral Large** via API for question generation and evaluation
+- Prompts engineered for FAANG-level interview standards
+- Fallback questions available if API fails
+
+### Evaluation Strictness
+- 5-word answers score ≤15/100
+- No generic feedback - all strengths must quote specific things you said
+- Model answers are standalone (200-250 words, all concepts covered)
+
+### Session Persistence
+- All questions, answers, and evaluations stored
+- Review past sessions anytime
+- Track improvement over time

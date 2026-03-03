@@ -1,122 +1,132 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "CS Interview Prep Platform",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#6366f1",
+    "light": "#818cf8",
+    "dark": "#4f46e5"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/pranav9989/be"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/pranav9989/be"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Platform",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Overview",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "features"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Getting Started",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "setup/installation",
+              "setup/configuration",
+              "setup/data-indexing"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Core Features",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "features/resume-analysis",
+              "features/mock-interviews",
+              "features/technical-qa",
+              "features/coding-practice",
+              "features/adaptive-learning"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "User Guide",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "guide/authentication",
+              "guide/profile-setup",
+              "guide/interview-sessions",
+              "guide/performance-tracking"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Technical Documentation",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Architecture",
             "pages": [
-              "api-reference/introduction"
+              "technical/architecture-overview",
+              "technical/backend-structure",
+              "technical/frontend-structure"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "AI & ML Systems",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "technical/rag-system",
+              "technical/speech-processing",
+              "technical/adaptive-engine",
+              "technical/embeddings-faiss"
+            ]
+          },
+          {
+            "group": "API Reference",
+            "pages": [
+              "api/authentication",
+              "api/interview-endpoints",
+              "api/resume-endpoints",
+              "api/websocket-events"
+            ]
+          },
+          {
+            "group": "Database",
+            "pages": [
+              "technical/database-schema",
+              "technical/user-mastery-tracking"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Contributing",
+            "pages": [
+              "development/setup-guide",
+              "development/project-structure",
+              "development/adding-features"
+            ]
+          },
+          {
+            "group": "Knowledge Base",
+            "pages": [
+              "development/kb-preparation",
+              "development/adding-topics",
+              "development/faiss-indexing"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/requirements",
+              "deployment/environment-variables",
+              "deployment/production-setup"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

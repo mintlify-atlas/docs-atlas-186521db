@@ -1,0 +1,586 @@
+---
+title: 'FAISS Indexing'
+description: 'Build vector search indexes for semantic question retrieval'
+---
+
+## Overview
+
+The FAISS (Facebook AI Similarity Search) indexing process transforms the clean knowledge base into a searchable vector database. This enables fast semantic similarity search to retrieve relevant Q&A pairs for answering user queries.
+
+## Script Location
+
+```
+source/scripts/mistral_faiss.py
+```
+
+## What FAISS Does
+
+FAISS provides:
+
+- **Vector similarity search**: Find semantically similar questions
+- **Efficient indexing**: Handle thousands of vectors with millisecond latency
+- **Scalability**: Supports millions of vectors with GPU acceleration
+- **Inner product search**: Uses normalized embeddings for cosine similarity
+
+## Prerequisites
+
+Before running the indexing script:
+
+1. **Run preparation**: Execute `prepare_kb.py` to generate `kb_clean.json`
+2. **Install dependencies**:
+
+```bash
+pip install sentence-transformers faiss-cpu numpy
+```
+
+For GPU acceleration:
+
+```bash
+pip install faiss-gpu
+```
+
+## Process Overview
+
+The indexing pipeline:
+
+1. Load clean knowledge base data
+2. Create text chunks combining questions and answers
+3. Generate embeddings using Sentence Transformers
+4. Build FAISS index with inner product similarity
+5. Save index and metadata files
+
+## Text Chunking
+
+Each Q&A pair is formatted as a single text chunk:
+
+```python
+def create_chunks_and_metas(data):
+    chunks = []
+    metas = []
+
+    for item in data:
+        text_chunk = f"Q: {item['question']}\nA: {item['answer']}"
+        chunks.append(text_chunk)
+
+        metas.append({
+            "id": item["id"],
+            "topic": item["topic"],
+            "subtopic": item["subtopic"],
+            "difficulty": item["difficulty"],
+            "source": item.get("source"),
+        })
+
+    return chunks, metas
+```
+
+See `source/scripts/mistral_faiss.py:24-40`
+
+### Chunk Format
+
+**Input**:
+
+```json
+{
+  "id": "42",
+  "question": "What is normalization?",
+  "answer": "Normalization is organizing data to reduce redundancy...",
+  "topic": "DBMS",
+  "subtopic": "Normalization",
+  "difficulty": "Intermediate",
+  "source": "database_qna.json"
+}
+```
+
+**Output Chunk**:
+
+```
+Q: What is normalization?
+A: Normalization is organizing data to reduce redundancy...
+```
+
+**Output Metadata**:
+
+```json
+{
+  "id": "42",
+  "topic": "DBMS",
+  "subtopic": "Normalization",
+  "difficulty": "Intermediate",
+  "source": "database_qna.json"
+}
+```
+
+## Embedding Generation
+
+The script uses Sentence Transformers to convert text into dense vector embeddings.
+
+### Model Selection
+
+**Default Model**: `all-MiniLM-L6-v2`
+
+- **Dimension**: 384
+- **Performance**: Fast inference, good quality
+- **Size**: 80MB
+- **Use case**: General-purpose semantic search
+
+**Alternative Models**:
+
+| Model | Dimensions | Size | Performance | Use Case |
+|-------|-----------|------|-------------|----------|
+| `all-mpnet-base-v2` | 768 | 420MB | Best quality | High accuracy needed |
+| `all-MiniLM-L12-v2` | 384 | 120MB | Balanced | More context |
+| `all-MiniLM-L6-v2` | 384 | 80MB | Fastest | Production (default) |
+| `paraphrase-multilingual-MiniLM-L12-v2` | 384 | 420MB | Multi-language | Non-English |
+
+### Embedding Code
+
+```python
+def build_faiss_index(chunks, metas):
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+
+    print("🔄 Generating embeddings...")
+    embeddings = model.encode(
+        chunks,
+        show_progress_bar=True,
+        normalize_embeddings=True  # IMPORTANT for cosine similarity
+    )
+
+    dimension = embeddings.shape[1]  # 384 for MiniLM-L6
+    index = faiss.IndexFlatIP(dimension)  # Inner Product = cosine similarity
+    index.add(np.asarray(embeddings, dtype="float32"))
+
+    # Save index and metadata...
+```
+
+See `source/scripts/mistral_faiss.py:43-66`
+
+### Why Normalize Embeddings?
+
+```python
+normalize_embeddings=True
+```
+
+Normalization converts vectors to unit length, making inner product (IP) equivalent to cosine similarity:
+
+- **Without normalization**: `IP(A, B) = A · B`
+- **With normalization**: `IP(A, B) = cos(θ)` where θ is angle between vectors
+
+This gives semantically meaningful similarity scores in range [-1, 1].
+
+## FAISS Index Types
+
+### IndexFlatIP (Current)
+
+```python
+index = faiss.IndexFlatIP(dimension)
+```
+
+**Characteristics**:
+- Exhaustive search (checks all vectors)
+- 100% accuracy
+- Best for < 1M vectors
+- O(n) search complexity
+
+**Use When**:
+- Dataset is small to medium (< 100K vectors)
+- You need perfect recall
+- Latency < 100ms is acceptable
+
+### Alternative: IndexIVFFlat
+
+```python
+quantizer = faiss.IndexFlatIP(dimension)
+index = faiss.IndexIVFFlat(quantizer, dimension, nlist=100)
+index.train(embeddings)
+index.add(embeddings)
+```
+
+**Characteristics**:
+- Inverted file index
+- ~90-95% recall (configurable)
+- Good for 100K - 10M vectors
+- Much faster than flat search
+
+**Parameters**:
+- `nlist`: Number of clusters (√n is good default)
+- `nprobe`: Clusters to search (higher = more accurate, slower)
+
+### Alternative: IndexHNSWFlat
+
+```python
+index = faiss.IndexHNSWFlat(dimension, 32)
+```
+
+**Characteristics**:
+- Hierarchical Navigable Small World graphs
+- ~95-99% recall
+- Best for 10K - 100M vectors
+- Fast search, slow indexing
+
+**Parameters**:
+- `M`: Number of connections (32 is good default)
+- Higher M = better recall but more memory
+
+## Index Optimization
+
+### For Larger Datasets (> 100K vectors)
+
+Replace the index creation with:
+
+```python
+def build_optimized_index(chunks, metas):
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    
+    embeddings = model.encode(
+        chunks,
+        show_progress_bar=True,
+        normalize_embeddings=True,
+        batch_size=64  # Adjust based on GPU memory
+    )
+    
+    dimension = embeddings.shape[1]
+    n_vectors = len(embeddings)
+    
+    # Use IVF for better performance
+    nlist = int(np.sqrt(n_vectors))  # Number of clusters
+    quantizer = faiss.IndexFlatIP(dimension)
+    index = faiss.IndexIVFFlat(quantizer, dimension, nlist)
+    
+    # Train on the data
+    print(f"🔄 Training index with {nlist} clusters...")
+    index.train(embeddings)
+    
+    # Add vectors
+    print("🔄 Adding vectors to index...")
+    index.add(embeddings)
+    
+    # Set search parameters
+    index.nprobe = 10  # Search 10 clusters (adjust for speed/accuracy tradeoff)
+    
+    return index
+```
+
+### For GPU Acceleration
+
+```python
+import faiss
+
+def build_gpu_index(chunks, metas):
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    model = model.to('cuda')  # Move model to GPU
+    
+    embeddings = model.encode(
+        chunks,
+        show_progress_bar=True,
+        normalize_embeddings=True
+    )
+    
+    dimension = embeddings.shape[1]
+    
+    # Build on CPU first
+    cpu_index = faiss.IndexFlatIP(dimension)
+    
+    # Move to GPU
+    res = faiss.StandardGpuResources()
+    gpu_index = faiss.index_cpu_to_gpu(res, 0, cpu_index)
+    
+    gpu_index.add(embeddings)
+    
+    # Move back to CPU for saving
+    cpu_index = faiss.index_gpu_to_cpu(gpu_index)
+    
+    return cpu_index
+```
+
+## Output Files
+
+The script generates three files in `source/data/processed/faiss_mistral/`:
+
+### 1. index.faiss
+
+Binary FAISS index file containing:
+- Vector embeddings
+- Index structure
+- Search metadata
+
+**Size**: ~1.5KB per vector (for 384-dim embeddings)
+
+### 2. metas.json
+
+JSON array with metadata for each vector:
+
+```json
+[
+  {
+    "id": "1",
+    "topic": "DBMS",
+    "subtopic": "DBMS Architecture",
+    "difficulty": "Beginner",
+    "source": "database_qna.json"
+  },
+  {
+    "id": "2",
+    "topic": "DBMS",
+    "subtopic": "Normalization",
+    "difficulty": "Intermediate",
+    "source": "database_qna.json"
+  }
+]
+```
+
+**Purpose**: Map search results back to original questions
+
+**Array Order**: Must match the order vectors were added to index
+
+### 3. ids.json (Optional)
+
+Some implementations also save a separate ID mapping:
+
+```json
+["1", "2", "3", ...]
+```
+
+## Running the Script
+
+### Basic Usage
+
+```bash
+cd source/scripts
+python mistral_faiss.py
+```
+
+### Expected Output
+
+```
+🔄 Generating embeddings...
+Batches: 100%|██████████| 10/10 [00:02<00:00,  4.12it/s]
+✅ FAISS index saved → data/processed/faiss_mistral/index.faiss
+✅ Metadata saved → data/processed/faiss_mistral/metas.json
+📦 Total vectors: 485
+```
+
+### Performance Metrics
+
+For ~500 questions:
+
+- **Embedding generation**: ~2-5 seconds (CPU), ~0.5s (GPU)
+- **Index building**: < 1 second
+- **Total time**: ~3-6 seconds
+- **Index size**: ~750KB
+- **Metadata size**: ~50KB
+
+## Resume FAISS vs Knowledge Base FAISS
+
+The system uses different FAISS indexes for different purposes:
+
+### Knowledge Base FAISS (Current)
+
+**Location**: `source/data/processed/faiss_mistral/`
+
+**Content**: Q&A pairs from computer science topics
+
+**Use**: Answering domain-specific questions
+
+**Index**: Questions + Answers as chunks
+
+### Resume FAISS (Separate)
+
+**Location**: `source/data/processed/faiss_resume/` (if implemented)
+
+**Content**: Resume text, job descriptions, candidate profiles
+
+**Use**: Matching resumes to jobs, finding candidates
+
+**Index**: Resume sections or full documents
+
+### Key Differences
+
+| Aspect | Knowledge Base | Resume |
+|--------|---------------|--------|
+| **Data** | Q&A pairs | Resume documents |
+| **Chunk size** | Question + Answer | Section or full doc |
+| **Metadata** | Topic, subtopic, difficulty | Skills, experience, education |
+| **Query type** | User questions | Job requirements |
+| **Update frequency** | Periodic (new questions) | Frequent (new candidates) |
+
+## Troubleshooting
+
+### Issue: "kb_clean.json not found"
+
+**Cause**: Preparation script hasn't been run
+
+**Solution**:
+
+```bash
+python prepare_kb.py
+```
+
+### Issue: Out of memory during embedding generation
+
+**Cause**: Too many vectors being processed at once
+
+**Solution**: Reduce batch size:
+
+```python
+embeddings = model.encode(
+    chunks,
+    show_progress_bar=True,
+    normalize_embeddings=True,
+    batch_size=32  # Default is 64
+)
+```
+
+### Issue: Index file is huge
+
+**Cause**: Using high-dimensional embeddings or large dataset
+
+**Solutions**:
+1. Use a smaller model (e.g., MiniLM-L6 instead of MPNet)
+2. Use product quantization:
+
+```python
+index = faiss.IndexIVFPQ(quantizer, dimension, nlist, 64, 8)
+```
+
+### Issue: Search is too slow
+
+**Cause**: Using flat index on large dataset
+
+**Solutions**:
+1. Switch to IVF index (see optimization section)
+2. Use GPU acceleration
+3. Reduce nprobe parameter
+
+### Issue: Poor search results
+
+**Possible Causes & Solutions**:
+
+1. **Embeddings not normalized**: Ensure `normalize_embeddings=True`
+2. **Wrong similarity metric**: Use IndexFlatIP for cosine similarity
+3. **Model mismatch**: Use same model for indexing and querying
+4. **Bad chunk formatting**: Ensure consistent "Q: ... A: ..." format
+
+## Verification
+
+### Check Index Statistics
+
+```python
+import faiss
+import json
+
+# Load index
+index = faiss.read_index("data/processed/faiss_mistral/index.faiss")
+
+# Load metadata
+with open("data/processed/faiss_mistral/metas.json") as f:
+    metas = json.load(f)
+
+print(f"Total vectors: {index.ntotal}")
+print(f"Dimension: {index.d}")
+print(f"Metadata entries: {len(metas)}")
+print(f"Is trained: {index.is_trained}")
+```
+
+### Test Search
+
+```python
+from sentence_transformers import SentenceTransformer
+import faiss
+import json
+
+# Load
+model = SentenceTransformer("all-MiniLM-L6-v2")
+index = faiss.read_index("data/processed/faiss_mistral/index.faiss")
+with open("data/processed/faiss_mistral/metas.json") as f:
+    metas = json.load(f)
+
+# Query
+query = "What is normalization?"
+query_embedding = model.encode([query], normalize_embeddings=True)
+
+# Search
+k = 3  # Top 3 results
+scores, indices = index.search(query_embedding, k)
+
+# Display results
+for i, (score, idx) in enumerate(zip(scores[0], indices[0])):
+    print(f"\nResult {i+1}: (score: {score:.4f})")
+    print(f"Topic: {metas[idx]['topic']} -> {metas[idx]['subtopic']}")
+    print(f"Difficulty: {metas[idx]['difficulty']}")
+```
+
+Expected output:
+
+```
+Result 1: (score: 0.8934)
+Topic: DBMS -> Normalization
+Difficulty: Beginner
+
+Result 2: (score: 0.7621)
+Topic: DBMS -> Normalization
+Difficulty: Intermediate
+
+Result 3: (score: 0.6845)
+Topic: DBMS -> DBMS Architecture
+Difficulty: Beginner
+```
+
+## Advanced Configuration
+
+### Batch Processing for Large Datasets
+
+```python
+def build_large_index(chunks, metas, batch_size=1000):
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    
+    # Process in batches
+    all_embeddings = []
+    for i in range(0, len(chunks), batch_size):
+        batch = chunks[i:i+batch_size]
+        embeddings = model.encode(batch, normalize_embeddings=True)
+        all_embeddings.append(embeddings)
+    
+    # Combine all batches
+    all_embeddings = np.vstack(all_embeddings)
+    
+    # Build index
+    dimension = all_embeddings.shape[1]
+    index = faiss.IndexFlatIP(dimension)
+    index.add(all_embeddings)
+    
+    return index
+```
+
+### Multi-GPU Indexing
+
+```python
+def build_multi_gpu_index(chunks, metas):
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    embeddings = model.encode(chunks, normalize_embeddings=True)
+    
+    dimension = embeddings.shape[1]
+    cpu_index = faiss.IndexFlatIP(dimension)
+    
+    # Use all available GPUs
+    gpu_index = faiss.index_cpu_to_all_gpus(cpu_index)
+    gpu_index.add(embeddings)
+    
+    # Move back to CPU for saving
+    cpu_index = faiss.index_gpu_to_cpu(gpu_index)
+    return cpu_index
+```
+
+## Next Steps
+
+After building the index:
+
+1. **Query the system**: Use `rag_query.py` to test retrieval
+2. **Monitor performance**: Track search latency and accuracy
+3. **Iterate on quality**: Refine embeddings or index type based on results
+
+## Related Documentation
+
+- **[KB Preparation](/development/kb-preparation)** - Preparing data for indexing
+- **[Adding Topics](/development/adding-topics)** - Expanding the knowledge base
+- **FAISS Documentation**: https://github.com/facebookresearch/faiss/wiki
+- **Sentence Transformers**: https://www.sbert.net/
