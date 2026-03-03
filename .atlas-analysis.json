@@ -1,0 +1,149 @@
+{
+  "projectType": "saas",
+  "projectName": "CS Interview Prep Platform",
+  "projectDescription": "AI-powered interview preparation platform with resume analysis, real-time mock interviews, and adaptive technical assessments for computer science topics.",
+  "theme": "palm",
+  "primaryColor": "#6366f1",
+  "lightColor": "#818cf8",
+  "darkColor": "#4f46e5",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Platform",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "features"
+            ]
+          },
+          {
+            "group": "Getting Started",
+            "pages": [
+              "setup/installation",
+              "setup/configuration",
+              "setup/data-indexing"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/resume-analysis",
+              "features/mock-interviews",
+              "features/technical-qa",
+              "features/coding-practice",
+              "features/adaptive-learning"
+            ]
+          },
+          {
+            "group": "User Guide",
+            "pages": [
+              "guide/authentication",
+              "guide/profile-setup",
+              "guide/interview-sessions",
+              "guide/performance-tracking"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Technical Documentation",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "technical/architecture-overview",
+              "technical/backend-structure",
+              "technical/frontend-structure"
+            ]
+          },
+          {
+            "group": "AI & ML Systems",
+            "pages": [
+              "technical/rag-system",
+              "technical/speech-processing",
+              "technical/adaptive-engine",
+              "technical/embeddings-faiss"
+            ]
+          },
+          {
+            "group": "API Reference",
+            "pages": [
+              "api/authentication",
+              "api/interview-endpoints",
+              "api/resume-endpoints",
+              "api/websocket-events"
+            ]
+          },
+          {
+            "group": "Database",
+            "pages": [
+              "technical/database-schema",
+              "technical/user-mastery-tracking"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Contributing",
+            "pages": [
+              "development/setup-guide",
+              "development/project-structure",
+              "development/adding-features"
+            ]
+          },
+          {
+            "group": "Knowledge Base",
+            "pages": [
+              "development/kb-preparation",
+              "development/adding-topics",
+              "development/faiss-indexing"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/requirements",
+              "deployment/environment-variables",
+              "deployment/production-setup"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Resume-based personalized question generation using RAG",
+    "Real-time speech-to-text interview streaming with WebSocket",
+    "Adaptive difficulty tracking across DBMS, OOP, and OS topics",
+    "AI-powered coding practice with SQL and Pandas problems",
+    "Speech analysis with pitch stability and fluency metrics",
+    "FAISS vector search for knowledge base retrieval",
+    "User mastery tracking with concept-level progress",
+    "Mistral AI-powered answer evaluation and feedback"
+  ],
+  "publicApiSurface": [
+    "/api/auth/signup - User registration",
+    "/api/auth/login - User authentication",
+    "/api/auth/logout - Session termination",
+    "/api/profile - User profile management",
+    "/api/resume/upload - Resume file upload",
+    "/api/resume/analyze - Extract and index resume data",
+    "/api/interview/start - Initialize interview session",
+    "/api/interview/questions - Generate personalized questions",
+    "/api/interview/evaluate - Evaluate answer with AI feedback",
+    "/api/interview/history - Retrieve past sessions",
+    "/api/rag/query - Query technical knowledge base",
+    "/api/coding/generate - Generate coding problems",
+    "/api/coding/evaluate - Evaluate code submission",
+    "/api/mastery/stats - Get user mastery statistics",
+    "WebSocket: join_interview - Start real-time session",
+    "WebSocket: audio_chunk - Stream audio data",
+    "WebSocket: stop_recording - End session with analysis"
+  ]
+}
