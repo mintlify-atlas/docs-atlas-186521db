@@ -404,6 +404,162 @@ Evaluate user's SQL or Pandas code submission.
 
 ---
 
+## Get User Progress
+
+<Info>
+Retrieves comprehensive progress statistics including mastery levels across topics.
+</Info>
+
+```http
+GET /api/user/progress
+```
+
+### Response
+
+<ResponseField name="topics" type="object">
+  Object containing mastery data by topic (DBMS, OOP, OS)
+</ResponseField>
+
+<ResponseField name="overall_stats" type="object">
+  Overall progress statistics
+</ResponseField>
+
+---
+
+## Get User Masteries
+
+<Info>
+Retrieves detailed mastery tracking data for all topics.
+</Info>
+
+```http
+GET /api/user/masteries
+```
+
+### Response
+
+<ResponseField name="masteries" type="array">
+  Array of UserMastery objects with concept-level tracking
+</ResponseField>
+
+---
+
+## Get Subtopic Statistics
+
+<Info>
+Get statistics for subtopics within a topic.
+</Info>
+
+```http
+GET /api/user/subtopic_stats?topic={topic}
+```
+
+### Parameters
+
+<ParamField query="topic" type="string" required>
+  Topic name (DBMS, OOP, or OS)
+</ParamField>
+
+---
+
+## Get Subtopic Questions
+
+<Info>
+Retrieve questions for a specific subtopic.
+</Info>
+
+```http
+GET /api/user/subtopic/{topic}/{subtopic}/questions
+```
+
+### Path Parameters
+
+<ParamField path="topic" type="string" required>
+  Topic name
+</ParamField>
+
+<ParamField path="subtopic" type="string" required>
+  Subtopic name
+</ParamField>
+
+---
+
+## Generate Action Plan
+
+<Info>
+Generate AI-powered study plan based on mastery gaps.
+</Info>
+
+```http
+POST /api/generate_action_plan
+```
+
+### Request Body
+
+<ParamField body="topic" type="string" required>
+  Topic to generate plan for (DBMS, OOP, OS)
+</ParamField>
+
+### Response
+
+<ResponseField name="plan" type="object">
+  Generated action plan with weak concepts and recommended focus areas
+</ResponseField>
+
+---
+
+## Get Action Plans
+
+<Info>
+Retrieve previously generated action plans for the user.
+</Info>
+
+```http
+GET /api/profile/action_plans
+```
+
+### Response
+
+<ResponseField name="plans" type="array">
+  Array of StudyActionPlan objects
+</ResponseField>
+
+---
+
+## Save Interview Session
+
+<Info>
+Save a completed interview session with results.
+</Info>
+
+```http
+POST /api/save_interview_session
+```
+
+### Request Body
+
+<ParamField body="session_type" type="string" required>
+  Type of session (mock, technical, coding, etc.)
+</ParamField>
+
+<ParamField body="questions" type="array">
+  Questions asked during the session
+</ParamField>
+
+<ParamField body="score" type="number">
+  Overall session score
+</ParamField>
+
+<ParamField body="feedback" type="string">
+  AI-generated feedback
+</ParamField>
+
+<ParamField body="speech_metrics" type="object">
+  Speech analysis metrics (WPM, fluency, etc.)
+</ParamField>
+
+---
+
 ## Error Responses
 
 | Status Code | Description |

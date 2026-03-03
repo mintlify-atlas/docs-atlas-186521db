@@ -10,7 +10,7 @@ The authentication system uses JWT (JSON Web Tokens) for secure API access. All 
 
 ### JWT Token Format
 
-```
+```http
 Authorization: Bearer <your_jwt_token>
 ```
 
@@ -282,6 +282,75 @@ Reset password using the token from the email link.
 <Note>
   Reset tokens are single-use and expire after 15 minutes.
 </Note>
+
+---
+
+## Get Profile
+
+<Info>
+Retrieve the authenticated user's profile information.
+</Info>
+
+```http
+GET /api/profile
+```
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer {token}
+</ParamField>
+
+### Response
+
+<ResponseField name="user" type="object">
+  User profile object with all fields (username, email, full_name, skills, etc.)
+</ResponseField>
+
+---
+
+## Update Profile
+
+<Info>
+Update the authenticated user's profile information.
+</Info>
+
+```http
+POST /api/update_profile
+```
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer {token}
+</ParamField>
+
+### Request Body
+
+<ParamField body="full_name" type="string">
+  Full name of the user
+</ParamField>
+
+<ParamField body="phone" type="string">
+  Phone number
+</ParamField>
+
+<ParamField body="experience_years" type="integer">
+  Years of experience
+</ParamField>
+
+<ParamField body="skills" type="array">
+  Array of skill strings
+</ParamField>
+
+### Response
+
+```json
+{
+  "success": true,
+  "message": "Profile updated successfully"
+}
+```
 
 ---
 
